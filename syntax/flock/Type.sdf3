@@ -1,0 +1,68 @@
+module flock/Type
+
+imports
+
+flock/Common
+flock/Pattern
+flock/Expr
+
+template options
+tokenize: "!.,(["
+
+context-free syntax // Type definitions
+
+TypeDef.TypeDefParams =
+<<TypeName>[<{Var ", "}+>] =
+  <{ConsDef "\n"}+>>
+
+TypeDef.TypeDefNoParams =
+<<TypeName> =
+  <{ConsDef "\n"}+>>
+
+ConsDef.ConsDef = [| [ConsName]([{TypeOrVar ", "}*])]
+
+TypeOrVar.TypeOrVarType = Type {prefer}
+TypeOrVar.TypeOrVarVar = Var
+
+context-free syntax // Lattice definitions
+
+// TODO: no need for the Var*?
+LatticeDef.LatticeDefParams =
+<<TypeName>[<{Var ", "}+>] where
+  <LatticePart+>>
+
+LatticeDef.LatticeDefNoParams =
+<<TypeName> where
+  <LatticePart+>>
+
+LatticePart.LatticePartType = [type = [Type]]
+LatticePart.Lub = [lub([Var], [Var]) = [Expr]]
+LatticePart.Glb = [glb([Var], [Var]) = [Expr]]
+LatticePart.Leq = [leq([Var], [Var]) = [Expr]]
+LatticePart.Geq = [geq([Var], [Var]) = [Expr]]
+LatticePart.NLeq = [nleq([Var], [Var]) = [Expr]]
+LatticePart.Top = [top = [Expr]]
+LatticePart.Bottom = [bottom = [Expr]]
+
+context-free syntax // Type expressions
+
+Type = SimpleType
+SimpleType.Name = "name"
+SimpleType.SimpleTypeTerm = "term"
+SimpleType.Index = "position"
+SimpleType.Int = "int"
+SimpleType.String = "string"
+SimpleType.Float = "float"
+SimpleType.Bool = "bool"
+Type = [([Type])] {bracket}
+Type.TypeTuple = [[TypeOrVar] * [TypeOrVar]] {right}
+Type.Map = <Map[<TypeOrVar>, <Type>]>
+Type.Set = <Set[<TypeOrVar>]>
+
+Type = UserType
+UserType.UserTypeNoParams = <<TypeName>> {avoid}
+UserType.UserTypeParams = <<TypeName>[<{TypeOrVar ", "}+>]> {avoid}
+
+context-free priorities
+
+{ Type.Set Type.Map UserType.UserTypeNoParams UserType.UserTypeParams } > Type.TypeTuple

@@ -1,0 +1,71 @@
+module codegen/main-method
+
+imports
+  codegen/nodes
+  codegen/graph
+
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  main-method = !MethodDecl([Public(), Static()], MethodHeader(Void(), Id("main"), <main-method-param>, [], Some(ThrowsDec([ClassType([], Id("IOException"), None())]))), <main-method-body>)
+  
+  main-method-param = !SingleParam(FormalParam([], ArrayTypeClassType(ClassType(Id("String"), None()), [AnnotateDim([])]), VariableDecl(Id("args"))))
+  main-method-body = !Block(
+            [ LocVarDeclStm(
+                LocalVarDecl(
+                  []
+                , ClassType(Id("IStrategoTerm"), None())
+                , [ VariableDeclInit(
+                      VariableDecl(Id("ast"))
+                    , InvokeQExp(
+                        NewInstance(
+                          None()
+                        , []
+                        , Id("TAFTermReader")
+                        , []
+                        , None()
+                        , [NewInstance(None(), [], Id("TermFactory"), [], None(), [])]
+                        )
+                      , None()
+                      , Id("parseFromFile")
+                      , [ArrayAccess(ExpressionName(Id("args")), Deci("0"))]
+                      )
+                    )
+                  ]
+                )
+              )
+            , LocVarDeclStm(
+				  LocalVarDecl(
+				    []
+				  , ClassType(Id("CfgGraph"), None())
+				  , [ VariableDeclInit(
+				        VariableDecl(Id("graph"))
+				      , InvokeQExp(
+				          ExpressionName(Id("CfgGraph"))
+				        , None()
+				        , Id("createControlFlowGraph")
+				        , [ExpressionName(Id("ast"))]
+				        )
+				      )
+				    ]
+				  )
+				)
+            , ExpressionStatement(Invoke(MethodName(Id("performDataAnalysis")), [ExpressionName(Id("graph"))]))
+            , ExpressionStatement(
+                InvokeQExp(
+                  ExpressionName(AmbiguousName(Id("System")), Id("out"))
+                , None()
+                , Id("println")
+                , [InvokeQExp(ExpressionName(Id("graph")), None(), Id("toGraphviz"), [])]
+                )
+              )
+            ]
+          )

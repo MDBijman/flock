@@ -1,0 +1,125 @@
+module flock/Expr
+
+imports
+
+flock/Common
+flock/Pattern
+flock/Occurrences
+flock/Type
+
+template options
+tokenize: "!.,(["
+
+context-free syntax // expressions
+
+Expr.ExprTerm = [[ConsName]([{Expr ","}*])]
+Expr.ExprExprRef = ExprRef
+Expr.PropOrAppl = [[PropName]([Var])] {prefer}
+Expr.ExprTuple = [([Expr], [{Expr ", "}+])]
+Expr.ExprLiteral = Literal
+Expr.ExprStart = [start]
+Expr.ExprEnd = [end]
+// TODO: add ADT application
+
+Expr = [([Expr])] {bracket}
+Expr.ExprType = [[Var].type]
+Expr.Appl = [[FunRef]([{Expr ", "}+])] {left}
+Expr.If = [if [Expr] then [Expr] else [Expr]]
+
+Expr.Eq = [[Expr] == [Expr]] {left}
+Expr.NEq = [[Expr] != [Expr]] {left}
+Expr.And = [[Expr] && [Expr]] {left}
+Expr.Or = [[Expr] || [Expr]] {left}
+Expr.Not = [![Expr]]
+
+Expr.Lt  = [[Expr] < [Expr]] {left}
+Expr.Lte = [[Expr] <= [Expr]] {left}
+Expr.Gt  = [[Expr] > [Expr]] {left}
+Expr.Gte = [[Expr] >= [Expr]] {left}
+
+Expr.Add = [[Expr] + [Expr]] {left}
+Expr.Sub = [[Expr] - [Expr]] {left}
+Expr.Mul = [[Expr] * [Expr]] {left}
+Expr.Div = [[Expr] / [Expr]] {left}
+Expr.Mod = [[Expr] % [Expr]] {left}
+Expr.Neg = [- [Expr]] {left}
+
+Expr.Match = [match [Expr] with [MatchArm+]] {longest-match}
+
+Expr.SetLiteral = [{ [{Expr ","}+] }]
+Expr.SetComp = [{ [Expr] | [{SetCompExpr ", "}+] }]
+Expr.MapLiteral = [{ [{MapBinding ","}+] }]
+Expr.MapComp = [{ [MapBinding] | [{MapCompExpr ", "}+] }]
+Expr.MapLookup = <<Expr>[<Expr>]>
+Expr.TypedEmptyLiteral = <{[<Type>]}> {prefer}
+SetCompExpr.SetCompExprSource = SetCompSource {prefer}
+SetCompExpr.SetCompExprPredicate = CompPredicate
+MapCompExpr.MapCompExprSource = MapCompSource {prefer}
+MapCompExpr.MapCompExprPredicate = CompPredicate
+CompPredicate.Predicate = Expr
+CompPredicate.MatchPredicate = [match [Expr] with [SetCompMatchArm+]] {longest-match}
+SetCompSource.SetSource = [[Pattern] <- [Expr]]
+MapCompSource.MapSource = [([Pattern] |-> [Pattern]) <- [Expr]]
+MapBinding.MapBinding = [[Expr] |-> [Expr]]
+
+Expr.TermIndex = [position([Var])]
+Expr.Occurrence = [[OccurrenceNamespaceId]{[Var]}] {avoid}
+
+Expr.Union = [[Expr] \/ [Expr]] {left}
+Expr.TypedUnion = <<Expr> \\[<Type>]/ <Expr>> {left}
+Expr.Difference = [[Expr] \ [Expr]] {left}
+Expr.Contains = [[Expr] in [Expr]] {left}
+Expr.Intersection = [[Expr] /\ [Expr]] {left}
+
+MatchArm.MatchArm = [| [Pattern] => [Expr]]
+SetCompMatchArm.SetCompMatchArmMatchArm = [| [Pattern]]
+
+Literal.IntLiteral = INT
+Literal.StringLiteral = STRING
+Literal.TrueLiteral = [true]
+Literal.FalseLiteral = [false]
+
+Ref.QualRef = [[ModuleName].[Var]] {avoid}
+Ref.Ref = Var
+
+ExprRef = Ref
+ExprRef.TopOf = [[Type].top]
+ExprRef.BottomOf = [[Type].bottom]
+
+FunRef.LubOf = [[Type].lub]
+FunRef.GlbOf = [[Type].glb]
+FunRef.LeqOf = [[Type].leq]
+FunRef.GeqOf = [[Type].geq]
+FunRef.NLeqOf = [[Type].nleq]
+FunRef = Ref
+
+context-free priorities
+  Expr.Appl >
+  Expr.MapLookup >
+  { Expr.Not
+    Expr.Neg } >
+  { non-assoc:
+    Expr.Union
+    Expr.Intersection
+    Expr.Contains
+    Expr.Difference } >
+  { left:
+    Expr.Mul
+    Expr.Div
+    Expr.Mod } >
+  { left:
+    Expr.Add
+    Expr.Sub } >
+  { left:
+    Expr.Lt
+    Expr.Lte
+    Expr.Gt
+    Expr.Gte } >
+  { left:
+    Expr.Eq
+    Expr.NEq } >
+  Expr.And >
+  Expr.Or >
+  { left:
+    Expr.If
+    Expr.Match }

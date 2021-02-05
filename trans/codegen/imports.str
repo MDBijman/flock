@@ -1,0 +1,59 @@
+module codegen/imports
+
+imports
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  create-import: c -> SingleTypeImport(<split-typename;reverse;create-typename;replace-outer-typename> c)
+  create-typename: [h] -> PackageOrTypeName(Id(h))
+  create-typename: [h|t] -> PackageOrTypeName(<create-typename> t, Id(h))
+  replace-outer-typename: PackageOrTypeName(x, y) -> TypeName(x, y)
+  replace-outer-typename: PackageOrTypeName(x) -> TypeName(x)
+  
+  split-typename = explode-string;SplitInit;rec x(SplitExit <+ split-typename-next; x)  
+  split-typename-next: (xs, cs, [y|ys]) -> (xs, [y|cs], ys) where <not(eq)> (y, 46)
+  split-typename-next: (xs, cs, [46|ys]) -> ([<reverse; implode-string> cs | xs], [], ys)
+  
+  all-imports = <map(create-import)> [
+  	"org.spoofax.interpreter.terms.IStrategoTerm",
+  	"org.spoofax.interpreter.terms.IStrategoAppl",
+  	"org.spoofax.interpreter.terms.IStrategoTuple",
+  	"org.spoofax.interpreter.terms.IStrategoList",
+  	"org.spoofax.terms.io.TAFTermReader",
+  	"org.spoofax.terms.TermFactory",
+  	"java.io.IOException",
+  	"org.spoofax.terms.util.M",
+  	"org.spoofax.terms.util.TermUtils",
+  	"java.util.HashSet",
+  	"java.util.Set",
+  	"java.util.HashMap",
+  	"java.util.Map",
+   	"java.util.stream.Collectors",
+  	"java.util.concurrent.LinkedBlockingQueue",
+  	"java.util.Queue",
+  	"java.util.Iterator",
+  	"java.util.Collection",
+  	"java.util.function.Supplier",
+  	"org.spoofax.terms.StrategoTuple",
+  	"org.spoofax.terms.StrategoAppl",
+  	"org.spoofax.terms.StrategoConstructor",
+  	"org.spoofax.terms.StrategoInt",
+  	"org.spoofax.terms.StrategoString",
+  	"org.spoofax.terms.StrategoList",
+  	"flock.subject.common.CfgGraph",
+  	"flock.subject.common.CfgNode",
+  	"flock.subject.common.Helpers",
+  	"flock.subject.common.Lattice",
+  	"flock.subject.common.MapUtils",
+  	"flock.subject.common.SetUtils",
+  	"flock.subject.common.TransferFunction",
+  	"flock.subject.common.UniversalSet"
+  ]

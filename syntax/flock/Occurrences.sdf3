@@ -1,0 +1,10 @@
+module flock/Occurrences
+
+template options
+  keyword -/- [a-zA-Z0-9\'\_]
+
+lexical syntax
+  OccurrenceNamespaceId = [A-Z] [a-zA-Z0-9\_]*
+
+lexical restrictions
+  OccurrenceNamespaceId -/- [a-zA-Z0-9\_]

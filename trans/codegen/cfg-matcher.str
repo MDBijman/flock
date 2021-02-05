@@ -1,0 +1,418 @@
+module codegen/cfg-matcher
+
+imports
+  codegen/util
+  codegen/nodes
+  codegen/graph
+  codegen/helpers
+
+  signatures/flock/-
+  signatures/flock/desugar/-
+
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  cfg-method = !MethodDecl(
+          [Public(), Static()]
+        , MethodHeader(
+            <graph-type>
+          , Id("createControlFlowGraph")
+          , SingleParam(
+              FormalParam(
+                []
+              , ClassType(Id("IStrategoTerm"), None())
+              , VariableDecl(Id("ast"))
+              )
+            )
+          , []
+          , None()
+          )
+        , Block(
+            [ Return(
+                NewInstance(
+                  None()
+                , []
+                , Id("CfgGraph")
+                , []
+                , None()
+                , [Invoke(MethodName(Id("createCfgs")), [ExpressionName(Id("ast"))])]
+                )
+              )
+            ]
+          )
+        )
+  cfg-collector-method: r -> result
+  where
+    root-rules := <filter(?(CFGRule(Root(), _, _)))> r;
+    root-condition := <create-root-condition> root-rules;
+    result := MethodDecl(
+          [Private(), Static()]
+        , MethodHeader(<node-set-type>, Id("createCfgs"), SingleParam(FormalParam([], ClassType(Id("IStrategoTerm"), None()), VariableDecl(Id("term")))), [], None())
+        , Block(
+            [ LocVarDeclStm(
+                LocalVarDecl(
+                  []
+                , <node-set-type>
+                , [ VariableDeclInit(
+                      VariableDecl(Id("nodes"))
+                    , NewInstance(
+                        None()
+                      , []
+                      , Id("HashSet")
+                      , []
+                      , Some(Diamond())
+                      , []
+                      )
+                    )
+                  ]
+                )
+              )
+            , If(
+                InvokeQExp(
+                  ExpressionName(Id("TermUtils"))
+                , None()
+                , Id("isAppl")
+                , [ExpressionName(Id("term"))]
+                )
+              , Block([If(
+                	root-condition
+              		, Block(
+                  	[ ExpressionStatement(
+                      	InvokeQExp(
+                        	ExpressionName(Id("nodes"))
+                      		, None()
+                      		, Id("addAll")
+                      		, [Invoke(MethodName(Id("createCfg")), [ExpressionName(Id("term"))])]
+                      	)
+                    	)
+                  	]
+                	)
+              	)])
+              )
+            , ForEach(
+                []
+              , ClassType(Id("IStrategoTerm"), None())
+              , VariableDecl(Id("subterm"))
+              , InvokeQExp(ExpressionName(Id("term")), None(), Id("getSubterms"), [])
+              , Block(
+                  [ ExpressionStatement(
+                      InvokeQExp(
+                        ExpressionName(Id("nodes"))
+                      , None()
+                      , Id("addAll")
+                      , [Invoke(MethodName(Id("createCfgs")), [ExpressionName(Id("subterm"))])]
+                      )
+                    )
+                  ]
+                )
+              )
+            , Return(ExpressionName(Id("nodes")))
+            ]
+          )
+        )
+        
+  create-root-condition: r -> <map(extract-pattern;cfg-pattern-to-condition(|"term", [])); root-condition-to-or> r where <debug> r
+  extract-pattern: CFGRule(_, pattern, _) -> pattern
+  root-condition-to-or: [h] -> h
+  root-condition-to-or: [h|t] -> LazyOr(h, <root-condition-to-or> t)
+
+  cfg-matcher-method: r -> result
+  where
+    cfg-rules := <filter(?(CFGRule(_, _, _)))> r;
+    aterm-param := FormalParam([], ClassType(Id("IStrategoTerm"), None()), VariableDecl(Id("term")));
+    params := SingleParam(aterm-param);
+    result := MethodDecl([Private(), Static()], MethodHeader(<node-set-type>, Id("createCfg"), params, [], None()), <cfg-matcher-body> cfg-rules)
+  	
+  cfg-matcher-body: r -> Block([<cfg-matcher-create-result>, <cfg-matcher-switch> r, <cfg-matcher-return-result>])
+  cfg-matcher-create-result = !LocVarDeclStm(
+                LocalVarDecl(
+                  []
+                , <node-set-type>
+                , [ VariableDeclInit(
+                      VariableDecl(Id("result"))
+                    , NewInstance(
+                        None()
+                      , []
+                      , Id("HashSet")
+                      , []
+                      , Some(Diamond())
+                      , []
+                      )
+                    )
+                  ]
+                )
+              )
+  cfg-matcher-return-result = !Return(ExpressionName(Id("result")))
+  
+  cfg-matcher-switch: r -> IfElse(
+                InvokeQExp(
+                  ExpressionName(Id("TermUtils"))
+                , None()
+                , Id("isList")
+                , [ExpressionName(Id("term"))]
+                )
+              , Block(
+                  [ LocVarDeclStm(
+                      LocalVarDecl(
+                        []
+                      , ClassType(Id("IStrategoList"), None())
+                      , [ VariableDeclInit(
+                            VariableDecl(Id("list"))
+                          , InvokeQExp(
+                              ExpressionName(Id("M"))
+                            , None()
+                            , Id("list")
+                            , [ExpressionName(Id("term"))]
+                            )
+                          )
+                        ]
+                      )
+                    )
+                  , If(
+                      InvokeQExp(ExpressionName(Id("list")), None(), Id("isEmpty"), [])
+                    , Block([Return(ExpressionName(Id("result")))])
+                    )
+                  , LocVarDeclStm(
+                      LocalVarDecl(
+                        []
+                      , <node-set-type>
+                      , [ VariableDeclInit(
+                            VariableDecl(Id("heads"))
+                          , Invoke(
+                              MethodName(Id("createCfg"))
+                            , [InvokeQExp(ExpressionName(Id("list")), None(), Id("head"), [])]
+                            )
+                          )
+                        ]
+                      )
+                    )
+                  , ExpressionStatement(
+                      InvokeQExp(
+                        ExpressionName(Id("result"))
+                      , None()
+                      , Id("addAll")
+                      , [ExpressionName(Id("heads"))]
+                      )
+                    )
+                  , ExpressionStatement(
+                      Assign(
+                        ExpressionName(Id("list"))
+                      , InvokeQExp(ExpressionName(Id("list")), None(), Id("tail"), [])
+                      )
+                    )
+                  , While(
+                      Not(
+                        InvokeQExp(ExpressionName(Id("list")), None(), Id("isEmpty"), [])
+                      )
+                    , Block(
+                        [ LocVarDeclStm(
+                            LocalVarDecl(
+                              []
+                            , <node-set-type>
+                            , [ VariableDeclInit(
+                                  VariableDecl(Id("newHeads"))
+                                , Invoke(
+                                    MethodName(Id("createCfg"))
+                                  , [InvokeQExp(ExpressionName(Id("list")), None(), Id("head"), [])]
+                                  )
+                                )
+                              ]
+                            )
+                          )
+                        , LocVarDeclStm(
+                            LocalVarDecl(
+                              []
+                            , <node-set-type>
+                            , [ VariableDeclInit(
+                                  VariableDecl(Id("leaves"))
+                                , Invoke(MethodName(Id("getAllLeaves")), [ExpressionName(Id("heads"))])
+                                )
+                              ]
+                            )
+                          )
+                        , ForEach(
+                            []
+                          , <node-type>
+                          , VariableDecl(Id("leave"))
+                          , ExpressionName(Id("leaves"))
+                          , Block(
+                              [ ExpressionStatement(
+                                  InvokeQExp(
+                                    ExpressionName(Id("leave"))
+                                  , None()
+                                  , Id("addChild")
+                                  , [ExpressionName(Id("newHeads"))]
+                                  )
+                                )
+                              ]
+                            )
+                          )
+                        , ExpressionStatement(Assign(ExpressionName(Id("heads")), ExpressionName(Id("newHeads"))))
+                        , ExpressionStatement(
+                            Assign(
+                              ExpressionName(Id("list"))
+                            , InvokeQExp(ExpressionName(Id("list")), None(), Id("tail"), [])
+                            )
+                          )
+                        ]
+                      )
+                    )
+                  ]
+                )
+              , <cfg-matcher-switch-internal> r
+              )
+  
+  cfg-matcher-switch-internal: [] -> Block([Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not create CFG node for term '\""), ExpressionName(Id("term"))), StringLiteral("\"'.\""))]))])
+  cfg-matcher-switch-internal: [CFGRule(_, pattern, body)|tail] -> result
+  where
+    condition := <cfg-pattern-to-condition(|"term", [])> pattern;
+    then := <cfg-pattern-to-then(|"term", [])> (pattern, body);
+    else := <cfg-matcher-switch-internal> tail;
+    result := IfElse(condition, then, else)
+  
+  cond-same: (l, r) -> Eq(l, r)
+  cond-equals: (l, r) -> InvokeQExp(l, None(), Id("equals"), [r])
+  cond-type-equals(|chain, rootterm): pattern -> <cond-equals> (<chain-to-getname(|rootterm)> chain, StringLiteral(<cfg-pattern-to-typename;to-string-literal> pattern))
+  cond-arity-equals(|chain, rootterm): length -> <cond-same> (InvokeQExp(<chain-to-expression(|rootterm)> chain, None(), Id("getSubtermCount"), []), Deci(<int-to-string> length))
+  chain-to-expression(|rootterm): [] -> ExpressionName(Id(rootterm))
+  chain-to-expression(|rootterm): [h|t] -> <chain-to-expression(|rootterm);get-subterm(|h)> t
+  chain-to-getname(|rootterm): chain -> InvokeQExp(<chain-to-expression(|rootterm);to-appl> chain, None(), Id("getName"), [])
+  to-appl: expr -> InvokeQExp(ExpressionName(Id("M")), None(), Id("appl"), [expr])
+  to-tuple: expr -> InvokeQExp(ExpressionName(Id("M")), None(), Id("tuple"), [expr])
+  extract-string: expr -> InvokeQExp(ExpressionName(Id("M")), None(), Id("string"), [expr])
+  extract-int: expr -> InvokeQExp(ExpressionName(Id("M")), None(), Id("integer"), [expr])
+  
+  cfg-pattern-to-condition(|rootterm, bindings) = cfg-pattern-to-condition-chain(|[], rootterm, bindings);condition-chain-to-lazy-and
+  condition-chain-to-lazy-and: [] -> True()
+  condition-chain-to-lazy-and: [h] -> h
+  condition-chain-to-lazy-and: [h|t] -> LazyAnd(h, <condition-chain-to-lazy-and> t)
+  
+  chainmap(f|chain, rootterm, bindings) = number(id);map(chainmap-internal(f|chain, rootterm, bindings));concat
+  chainmap-internal(f|chain, rootterm, bindings): (p, i) -> <f(|[i|chain], rootterm, bindings)> p
+  
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): PropPatternEnd(x) -> <cfg-pattern-to-condition-chain(|chain, rootterm, bindings)> x
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): PropPatternStart(x) -> <cfg-pattern-to-condition-chain(|chain, rootterm, bindings)> x
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): Backward(x, _) -> <cfg-pattern-to-condition-chain(|chain, rootterm, bindings)> x
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): Forward(_, x) -> <cfg-pattern-to-condition-chain(|chain, rootterm, bindings)> x
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): At(_, x) -> <cfg-pattern-to-condition-chain(|chain, rootterm, bindings)> x
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): PatternVar(var) -> <var-equals-or-ignore(|chain, rootterm, var)> bindings
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): PatternWildcard(_) -> []
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): PatternLiteral(StringLiteral(x)) -> [<cond-equals> (<chain-to-expression(|rootterm);extract-string> chain, StringLiteral(x))]
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): PatternLiteral(IntLiteral(x)) -> [<cond-same> (<chain-to-expression(|rootterm);extract-int> chain, Deci(x))]
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): PatternTuple(head, tail) -> result
+  where
+    istuple := [InvokeQExp(ExpressionName(Id("TermUtils")), None(), Id("isTuple"), [<chain-to-expression(|rootterm)> chain])];
+    argmatch := <chainmap(cfg-pattern-to-condition-chain|chain, rootterm, bindings)> [head|tail];
+    result := <concat> [istuple, argmatch]
+  cfg-pattern-to-condition-chain(|chain, rootterm, bindings): this@PatternTerm(name, args) -> result
+  where
+    length := <length> args;
+    isappl := [InvokeQExp(ExpressionName(Id("TermUtils")), None(), Id("isAppl"), [<chain-to-expression(|rootterm)> chain])];
+    typematch := [<cond-type-equals(|chain, rootterm)> this, <cond-arity-equals(|chain, rootterm)> length];
+    argmatch := <chainmap(cfg-pattern-to-condition-chain|chain, rootterm, bindings)> args;
+    result := <concat> [isappl, typematch, argmatch]
+  
+  var-equals-or-ignore(|chain, rootterm, var): [] -> []
+  var-equals-or-ignore(|chain, rootterm, var): [var|_] -> [InvokeQExp(<chain-to-expression(|rootterm)> chain, None(), Id("equals"), [ExpressionName(Id(<to-term-name> var))])]
+  var-equals-or-ignore(|chain, rootterm, var): [_|t] -> <var-equals-or-ignore(|chain, rootterm, var)> t
+  
+  cfg-pattern-to-then(|rootterm, bindings): (pattern, body) -> Block(<concat> [<cfg-pattern-to-then-chain(|[], rootterm, bindings)> pattern, <map(cfg-body-ensure-exists(|pattern)); concat; uniq> body, <map(cfg-body-link); concat> body])
+  cfg-pattern-to-then(|rootterm, bindings) = cfg-pattern-to-then-chain(|[], rootterm, bindings)
+  cfg-pattern-to-then-chain(|chain, rootterm, bindings): At(var, x) -> <concat> [<cfg-pattern-to-then-chain(|chain, rootterm, bindings)> PatternVar(var), <cfg-pattern-to-then-chain(|chain, rootterm, bindings)> x]
+  cfg-pattern-to-then-chain(|chain, rootterm, bindings): PatternWildcard(_) -> []
+  cfg-pattern-to-then-chain(|chain, rootterm, bindings): PatternLiteral(_) -> []
+  cfg-pattern-to-then-chain(|chain, rootterm, bindings): PatternTerm(_, args) -> <chainmap(cfg-pattern-to-then-chain|chain, rootterm, bindings)> args
+  cfg-pattern-to-then-chain(|chain, rootterm, bindings): PatternTuple(head, tail) -> <chainmap(cfg-pattern-to-then-chain|chain, rootterm, bindings)> [head|tail]
+  cfg-pattern-to-then-chain(|chain, rootterm, bindings): PatternVar(var) -> <var-set-or-ignore(|chain, rootterm, var)> bindings
+  
+  var-set-or-ignore(|chain, rootterm, var): [] -> [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [VariableDeclInit(VariableDecl(Id(<to-term-name> var)), <chain-to-expression(|rootterm)> chain)]))]
+  var-set-or-ignore(|chain, rootterm, var): [var|_] -> []
+  var-set-or-ignore(|chain, rootterm, var): [_|t] -> <var-set-or-ignore(|chain, rootterm, var)> t
+  
+  cfg-body-ensure-exists(|pattern) = cfg-body-ensure-exists-internal(|<create-alias-map> pattern)
+  cfg-body-ensure-exists-internal(|aliases): Chain([l, r]) -> <concat> [<cfg-body-ensure-exists-internal(|aliases)> l, <cfg-body-ensure-exists-internal(|aliases)> r]
+  cfg-body-ensure-exists-internal(|aliases): Ref(var) -> <concat> [
+    <lookup-with-default(refer-node,build-node)> (var, aliases),
+    [LocVarDeclStm(LocalVarDecl([], <node-set-type>, [VariableDeclInit(VariableDecl(Id(<to-build-leaves-name> var)), InvokeQExp(ExpressionName(Id(<to-build-node-name> var)), None(), Id("getLeaves"), []))]))]
+  ]
+  cfg-body-ensure-exists-internal(|aliases): Recurse(var) -> <concat> [
+    <lookup-with-default(refer-rec,rec-node)> (var, aliases),
+    [LocVarDeclStm(LocalVarDecl([], <node-set-type>, [VariableDeclInit(VariableDecl(Id(<to-rec-leaves-name> var)), Invoke(MethodName(Id("getAllLeaves")), [ExpressionName(Id(<to-rec-node-name> var))]))]))]
+  ]
+  cfg-body-ensure-exists-internal(|aliases): Entry() -> []
+  cfg-body-ensure-exists-internal(|aliases): Exit() -> []
+  cfg-body-ensure-exists-internal(|aliases): CFGChainElementStart() -> []
+  cfg-body-ensure-exists-internal(|aliases): CFGChainElementEnd() -> []
+  
+  build-node: var -> [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-build-node-name> var)), NewInstance(None(), [], Id("CfgNode"), [], None(), [ExpressionName(Id(<to-term-name> var))]))]))]
+  refer-node: (alias, var) -> <concat> [<build-node> var, [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-build-node-name> alias)), ExpressionName(Id(<to-build-node-name> var)))]))]]
+  rec-node: var -> [LocVarDeclStm(LocalVarDecl([], <node-set-type>, [VariableDeclInit(VariableDecl(Id(<to-rec-node-name> var)), Invoke(MethodName(Id("createCfg")), [ExpressionName(Id(<to-term-name> var))]))]))]
+  refer-rec: (alias, var) -> <concat> [<rec-node> var, [LocVarDeclStm(LocalVarDecl([], <node-set-type>, [VariableDeclInit(VariableDecl(Id(<to-rec-node-name> alias)), ExpressionName(Id(<to-rec-node-name> var)))]))]]
+  
+  create-alias-map: PatternWildcard(_) -> []
+  create-alias-map: PatternLiteral(_) -> []
+  create-alias-map: PatternTerm(_, args) -> <map(create-alias-map);concat> args
+  create-alias-map: PatternTuple(head, tail) -> <map(create-alias-map);concat> [head|tail]
+  create-alias-map: PatternVar(_) -> []
+  create-alias-map: At(alias, PatternVar(var)) -> [(alias, var)]
+  create-alias-map: At(alias, at@At(var, _)) -> [(alias, var)|<create-alias-map>at]
+  create-alias-map: At(_, p) -> <create-alias-map> p
+  
+  get-bindings: PatternWildcard(_) -> []
+  get-bindings: PatternLiteral(_) -> []
+  get-bindings: PatternTerm(_, args) -> <map(get-bindings);concat> args
+  get-bindings: PatternTuple(head, tail) -> <map(get-bindings);concat> [head|tail]
+  get-bindings: PatternVar(var) -> [var]
+  get-bindings: At(var, p) -> [var|<get-bindings> p]
+  
+  cfg-body-link: Chain([Entry(), r]) -> <cfg-body-add-to-result> r
+  cfg-body-link: Chain([CFGChainElementStart(), r]) -> <cfg-body-add-to-result> r
+  cfg-body-link: Chain([Ref(l), r]) -> [ExpressionStatement(
+                InvokeQExp(
+                  ExpressionName(Id(<to-build-node-name> l))
+                , None()
+                , Id("addChild")
+                , [ExpressionName(Id(<extract-node-name> r))]
+                )
+              )]
+  cfg-body-link: Chain([Recurse(l), r]) -> [ForEach(
+                      []
+                    , <node-type>
+                    , VariableDecl(Id("leave"))
+                    , ExpressionName(Id(<to-rec-leaves-name> l))
+                    , Block(
+                      [ ExpressionStatement(
+                          InvokeQExp(
+                            ExpressionName(Id("leave"))
+                          , None()
+                          , Id("addChild")
+                          , [ExpressionName(Id(<extract-node-name> r))]
+                          )
+                        )
+                      ])
+                    )]
+  cfg-body-link: Chain([_, _]) -> []
+  
+  cfg-body-add-to-result: Ref(var) -> [ExpressionStatement(InvokeQExp(ExpressionName(Id("result")), None(), Id("add"), [ExpressionName(Id(<to-build-node-name> var))]))]
+  cfg-body-add-to-result: Recurse(var) -> [ExpressionStatement(InvokeQExp(ExpressionName(Id("result")), None(), Id("addAll"), [ExpressionName(Id(<to-rec-node-name> var))]))]
+  cfg-body-add-to-result: Exit() -> []
+  cfg-body-add-to-result: CFGChainElementEnd() -> []
+  
+  cfg-pattern-to-typename: At(_, x) -> <cfg-pattern-to-typename> x
+  cfg-pattern-to-typename: PatternTerm(name, _) -> name
+  
+  extract-node-name: Recurse(var) -> <to-rec-node-name> var
+  extract-node-name: Ref(var) -> <to-build-node-name> var
+  
+  to-build-leaves-name = append-string(|"_lb")
+  to-rec-leaves-name = append-string(|"_lr")
+  to-build-node-name = append-string(|"_nb")
+  to-rec-node-name = append-string(|"_nr")

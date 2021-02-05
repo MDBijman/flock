@@ -1,0 +1,28 @@
+module flock/desugar/Type
+
+imports
+
+flock/Type
+
+flock/Common
+flock/Pattern
+
+context-free syntax
+
+TypeDef.TypeDefParams-DS =
+[type [TypeName]([{Var ", "}+]) =
+  [{ConsDef "\n"}+]]
+
+TypeDef.TypeDefNoParams-DS =
+[type [TypeName] =
+  [{ConsDef "\n"}+]]
+
+context-free syntax // Lattice definitions
+
+LatticeDef.LatticeDefNoParams-DS =
+[lattice [TypeName] where
+  [LatticePart+]]
+
+LatticeDef.LatticeDefParams-DS =
+[lattice [TypeName]([{Var ", "}+]) where
+  [LatticePart+]]

@@ -1,0 +1,12 @@
+module flock/desugar/Function
+
+imports
+
+flock/Function
+
+flock/Common
+flock/desugar/Expr
+
+context-free syntax
+
+FunDef.FunDef-DS = [fun [Var]([{FunArg ", "}+]) = [Expr]]

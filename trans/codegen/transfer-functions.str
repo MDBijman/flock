@@ -1,0 +1,101 @@
+module codegen/transfer-functions
+
+imports
+  codegen/nodes
+  codegen/util
+  codegen/lattices
+  codegen/expressions
+  codegen/cfg-matcher
+  
+  signatures/flock/-
+  signatures/flock/desugar/-
+  
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  transfer-type-name = !"TransferFunction"
+  transfer-type-id = !Id(<transfer-type-name>)
+  transfer-type = !ClassType(<transfer-type-id>, None())
+  to-transfer-name = append-string(|<transfer-type-name>)
+  
+  transfer-classes(|r) = <filter(?PropRule(_, _, _, _));reverse;number(id);create-all-transfer-classes> r
+  create-all-transfer-classes: r -> <concat> [<transfer-instances-class> r, <create-transfer-classes> r]
+  
+  transfer-class = ![ClassDeclaration(
+      [Abstract()]
+    , <transfer-type-id>
+    , None()
+    , None()
+    , None()
+    , [MethodDecl(
+          [Public(), Abstract()]
+        , MethodHeader(
+            ClassType(Id("Object"), None())
+          , Id("eval")
+          , SingleParam(FormalParam([], <node-type>, VariableDecl(Id("node"))))
+          , []
+          , None()
+          )
+        , NoMethodBody()
+        )
+      ]
+    )]
+  
+  set-term-to-node-term = ![LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id("term")), ExpressionName(AmbiguousName(Id("node")), Id("term")))]))]
+  create-transfer-classes = map(create-transfer-class)
+  create-transfer-class: (PropRule(prop, pat, expr, wc), index) -> ClassDeclaration(
+      []
+    , <get-transfer-id> index
+    , None()
+    , Some(SuperClass(ClassType([], Id("TransferFunction"), None())))
+    , None()
+    , [ MethodDecl(
+          [MarkerAnno(TypeName(Id("Override"))), Public()]
+        , MethodHeader(
+            ClassType(Id("Object"), None())
+          , Id("eval")
+          , SingleParam(FormalParam([], <node-type>, VariableDecl(Id("node"))))
+          , []
+          , None()
+          )
+        , Block(statements)
+        )
+      ]
+    )
+  where
+    pattern-vars := <pattern-to-vars> pat;
+    where-vars := <where-to-code> wc;
+    return-statement := [Return(<transform-expr> expr)];
+    statements := <concat> [<set-term-to-node-term>, pattern-vars, where-vars, return-statement]
+  
+  pattern-to-vars: Backward(p, name) -> <concat> [<name-to-node> name, <cfg-pattern-to-then(|"term", [])> p]
+  pattern-to-vars: Forward(name, p) -> <concat> [<name-to-node> name, <cfg-pattern-to-then(|"term", [])> p]
+  pattern-to-vars: PropPatternStart(p) -> <cfg-pattern-to-then(|[], "term")> p
+  pattern-to-vars: PropPatternEnd(p) -> <cfg-pattern-to-then(|[], "term")> p
+  
+  name-to-node: name -> [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-term-name> name)), ExpressionName(Id("node")))]))]
+  
+  where-to-code: NoWhereClause() -> []
+  where-to-code: WhereClause(bindings) -> <map(binding-to-code)> bindings
+  binding-to-code: Binding(var, expr) -> LocVarDeclStm(LocalVarDecl([], ClassType(Id("Object"), None()), [ VariableDeclInit(VariableDecl(Id(<to-term-name> var)), <transform-expr> expr)]))
+  
+  transfer-instances-class: r -> [ClassDeclaration(
+      []
+    , Id("TransferFunctions")
+    , None()
+    , None()
+    , None()
+    , <map(create-transfer-field)> r
+    )]
+  create-transfer-field: (_, index) -> FieldDecl([Public(), Static()], ClassType(Id("TransferFunction"), None()), [ VariableDeclInit(VariableDecl(<get-transfer-id> index), NewInstance(None(), [], <get-transfer-id> index, [], None(), []))])
+  
+  get-transfer-id: index -> Id(<concat-strings> ["TransferFunction", <int-to-string> index])
+  get-transfer-function: index -> ExpressionName(AmbiguousName(Id("TransferFunctions")), <get-transfer-id> index)

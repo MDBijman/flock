@@ -1,0 +1,45 @@
+module flock/Signature
+
+imports
+
+  flock/Common
+
+context-free syntax
+
+  Signature.SignatureSorts = <
+    sorts
+      <{SortDecl "\n"}*>
+  > {longest-match}
+
+  Signature.SignatureConstructors = <
+    constructors
+      <{OpDecl "\n"}*>
+  > {longest-match}
+
+  SortDecl.SignatureSortDecl  = SignatureSortId
+  SortDecl.SignatureSortAlias = <<SignatureSortId> = <SortRef>>
+
+  SortRef.SimpleReference  	      = SignatureSortId
+  SortRef.SignatureListSort       = <list(<SortRef>)>
+  SortRef.SignatureTuple0Sort     = <( )>
+  SortRef.SignatureTupleNSort     = <(<SortRef> * <{SortRef " * "}+>)>
+  SortRef.SignatureIntSort        = "int"
+  SortRef.SignatureStringSort     = "string"
+  SortRef.SignatureOccurrenceSort = "occurrence"
+  SortRef                         = <(<SortRef>)> {bracket}
+
+  OpDecl.SignatureOpDecl  = <<SignatureOpId> : <OpSort>>
+
+  OpSort.SignatureConstOp = SortRef
+  OpSort.SignatureArrowOp = [[{SortRef " * "}+] -> [SortRef]]
+
+lexical syntax
+
+  SignatureSortId = ID
+  SignatureSortId = SignatureKeyword {reject}
+  SignatureSortId = "list" | "int" | "string" | "occurrence" | "scope" | "path" | "label" | "astId" {reject}
+
+  SignatureOpId = ID
+  SignatureOpId = SignatureKeyword {reject}
+
+  SignatureKeyword = "sorts" | "constructors"

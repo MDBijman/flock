@@ -1,0 +1,202 @@
+module codegen/build
+
+imports
+  desugar
+  codegen/-
+  
+  signatures/flock/-
+  signatures/flock/desugar/-
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+  pp/metaborg-java-pp
+  pp/metaborg-java-parenthesize
+  
+  libstratego-gpp
+
+rules
+  flo-to-java = flo-to-java-ast; java-ast-to-code
+  flo-to-java-ast = desugar-all; module-to-java
+  
+  // CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, class)
+  flo-to-cfgnode-java: m -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+      ~type-dec*:class
+    ]|
+  with
+    imports := <all-imports> 
+  ; class := <desugar-all; ?Module(_, _, r); node-class(|r)> m
+  
+  // CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, class)
+  flo-to-cfggraph-java: m -> java:compilation-unit |[ 
+      package org.spoofax;
+      ~import-dec*:imports
+      ~type-dec*:class
+    ]|
+  with
+    imports := <all-imports> 
+  ; class := <desugar-all; ?Module(_, _, r); graph-class(|r)> m
+  
+   //CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, <setutils-class>)
+  flo-to-setutils-java: m -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+  	  ~type-dec*:class
+    ]| 
+  with 
+    imports := <all-imports>
+  ; class := <setutils-class>
+  
+  //CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, <maputils-class>)
+  flo-to-maputils-java: m -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+  	  ~type-dec*:class
+    ]| 
+  with 
+    imports := <all-imports>
+  ; class := <maputils-class>
+  
+  // CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, <universalset-class>)
+  flo-to-universalset-java: m -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+  	  ~type-dec*:class
+    ]| 
+  with 
+    imports := <all-imports>
+  ; class := <universalset-class>
+  
+  // CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, <property-class>)
+  flo-to-property-java: m -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+  	  ~type-dec*:class
+    ]| 
+  with 
+    imports := <all-imports>
+  ; class := <property-class>
+  
+  // CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, <lattice-class>)
+  flo-to-lattice-java: m -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+  	  ~type-dec*:class
+    ]| 
+  with 
+    imports := <all-imports>
+  ; class := <lattice-class>
+  
+  // CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, <helper-class>)
+  flo-to-helper-java: m -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+  	  ~type-dec*:class
+    ]| 
+  with 
+    imports := <all-imports>
+  ; class := <helper-class>
+  
+  //CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, <transfer-class>)
+  flo-to-transfer-java: m -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+  	  ~type-dec*:class
+    ]| 
+  with 
+    imports := <all-imports>
+  ; class := <transfer-class>
+
+  java-ast-to-code =
+    parenthesize-metaborg-java
+    ; prettyprint-metaborg-java-start-symbols
+    ; !V([], <id>)
+    ; box2text-string(|120)
+
+  //CompilationUnit(Some(PackageDeclaration([], [Id("org"), Id("spoofax")])), <all-imports>, classes)
+  module-to-java: Module(name, _, r) -> java:compilation-unit |[ 
+  	  package org.spoofax;
+  	  ~import-dec*:imports
+  	  ~type-dec*:classes
+    ]| 
+  where
+    imports := <all-imports>
+  ; classes := <concat> [
+      <main-class(|r)>,
+      <lattice-classes(|r)>,
+      <transfer-classes(|r)>,
+      <user-functions-class(|r)>
+    ]
+
+  main-class(|r) = ![ClassDeclaration([Public()], Id("FlowAnalysis"), None(), None(), None(), [<main-method>, <create-node-factory> r, <worklist-algorithm> r])]
+
+  create-node-factory: r -> java:method-dec |[
+    public static void initCfgNode(CfgNode node) {
+      ~bstm*:stmts
+    }
+  ]|
+  where 
+  stmts := <concat> [
+	<retain-all(?PropDef(_, UserTypeParams(_, _))); map(propdef-to-add)>,
+	<retain-all(?PropDef(_, _)); map(propdef-to-bottom)>,
+    [ <node-factory-switch> r ]
+  ]
+  
+  worklist-algorithm: r -> java:method-dec |[
+    public static void performDataAnalysis(CfgGraph graph) {
+      Queue<CfgNode> worklist = new LinkedBlockingQueue<>();
+      HashSet<CfgNode> inWorklist = new HashSet<>();
+      for (CfgNode node : graph.flatten()) {
+        worklist.add(node);
+        inWorklist.add(node);
+        initCfgNode(node);
+	  }
+	  for (CfgNode root : graph.roots) ~inits
+	  while(!worklist.isEmpty()) {
+	    CfgNode node = worklist.poll();
+	    inWorklist.remove(node);
+	    
+	    ~*val-setters
+	    
+	    for (CfgNode successor : node.children) {
+	      boolean changed = false;
+	      ~*forward-updaters
+	      if (changed && !inWorklist.contains(successor)) {
+	        worklist.add(successor);
+	        inWorklist.add(successor);
+	      }
+	    }
+	    
+	    for (CfgNode successor : node.parents) {
+	      boolean changed = false;
+	      ~*backward-updaters
+	      if (changed && !inWorklist.contains(successor)) {
+	        worklist.add(successor);
+	        inWorklist.add(successor);
+	      }
+	    }
+	  }
+    }
+  ]| 
+  
+  where 
+    inits := Block(<retain-all(?PropDef(_, _)); map(propdef-to-init)>)
+  ; val-setters := <get-newvalue-setters> r
+  ; forward-updaters := <get-forward-updaters> r
+  ; backward-updaters := <get-backward-updaters> r
+  
+  propdef-to-bottom: PropDef(n, _) -> java:stm |[ node.getProperty(~name).value = node.getProperty(~name).lattice.bottom(); ]|
+    where name := <to-string-literal> n
+                    
+  propdef-to-add: PropDef(n, UserTypeParams(tname, _)) -> java:stm |[ node.addProperty(~name, Lattices.~tname); ]|
+    where name := <to-string-literal> n
+                    
+  propdef-to-init: PropDef(n, _) -> java:stm |[ root.getProperty(~name).value = root.getProperty(~name).init.eval(root); ]| 
+    where name := <to-string-literal> n

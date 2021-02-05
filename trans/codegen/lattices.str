@@ -1,0 +1,246 @@
+module codegen/lattices
+
+imports
+  codegen/util
+  codegen/universalset
+  codegen/setutils
+  codegen/expressions
+  
+  signatures/flock/-
+  signatures/flock/desugar/-
+  
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  create-lattice-map: r -> <filter(?PropDef(_, _));map(create-lattice-tuple)> r
+  create-lattice-tuple: PropDef(prop, UserTypeParams(lattice, _)) -> (prop, lattice)
+  
+  lattice-type-name = !"Lattice"
+  lattice-type-id = !Id(<lattice-type-name>)
+  lattice-type = !ClassType(<lattice-type-id>, None())
+  to-lattice-name = append-string(|<lattice-type-name>)
+  to-lattice-name: Map(k, v) -> <append-string(|<lattice-type-name>)> "Map"
+   
+  lattice-classes(|r) = <filter(?LatticeDefParams(_, _, _));create-all-lattice-classes> r
+  create-all-lattice-classes: r -> <concat> [<lattices-instances-class> r, <mustset-class>, <mayset-class>, <map-class>, <map(lattice-to-class)> r]
+  
+  lattice-invocation(|lattice, f): args -> InvokeQExp(NewInstance(None(), [], Id(<to-lattice-name> lattice), [], None(), <lattice-to-constructor-args> lattice), None(), Id(f), <map(transform-expr)> args) with <debug> lattice
+  lattice-top(|lattice) = <lattice-invocation(|lattice, "top")> []
+  lattice-bottom(|lattice) = <lattice-invocation(|lattice, "bottom")> []
+  lattice-lub(|lattice): (l, r) -> <lattice-invocation(|lattice, "lub")> [l, r]
+  lattice-glb(|lattice): (l, r) -> <lattice-invocation(|lattice, "glb")> [l, r]
+  lattice-leq(|lattice): (l, r) -> <lattice-invocation(|lattice, "leq")> [l, r]
+  lattice-geq(|lattice): (l, r) -> <lattice-invocation(|lattice, "geq")> [l, r]
+  lattice-nleq(|lattice): (l, r) -> <lattice-invocation(|lattice, "nleq")> [l, r]
+  
+  lattice-to-constructor-args: Map(ktype, UserTypeParams(vtype, _)) -> [NewInstance(None(), [], Id(name), [], None(), [])] with name := <to-lattice-name> vtype
+  lattice-to-constructor-args = ![]
+  
+  lattice-class = ![
+    java:type-dec |[
+	    abstract class Lattice {
+			public abstract Object bottom();
+		
+			public abstract Object lub(Object l, Object r);
+		
+			public boolean leq(Object l, Object r) {
+				return lub(l, r).equals(r);
+			}
+		
+			public boolean nleq(Object l, Object r) {
+				return !leq(l, r);
+			}
+		
+			public Object glb(Object l, Object r) {
+				return null;
+			}
+		
+			public boolean geq(Object l, Object r) {
+				return glb(l, r).equals(l);
+			}
+		
+			public Object top() {
+				return null;
+			}
+		}
+    ]|
+    ]
+  
+  mayset-class = ![
+    java:type-dec |[
+		class MaySetLattice extends Lattice {
+			@Override
+			public Object bottom() {
+				return new HashSet();
+			}
+		
+			@Override
+			public Object top() {
+				return new UniversalSet();
+			}
+		
+			@Override
+			public Object lub(Object l, Object r) {
+				return SetUtils.union(l, r);
+			}
+		
+			@Override
+			public boolean leq(Object l, Object r) {
+				return SetUtils.isSubsetEquals(l, r);
+			}
+		
+			@Override
+			public Object glb(Object l, Object r) {
+				return SetUtils.intersection(l, r);
+			}
+		
+			@Override
+			public boolean geq(Object l, Object r) {
+				return SetUtils.isSupersetEquals(l, r);
+			}
+		}
+    ]|
+    ]
+
+  mustset-class = ![
+    java:type-dec |[
+    class MustSetLattice extends Lattice {
+			@Override
+			public Object bottom() {
+				return new UniversalSet();
+			}
+		
+			@Override
+			public Object top() {
+				return new HashSet();
+			}
+		
+			@Override
+			public Object lub(Object l, Object r) {
+				return SetUtils.intersection(l, r);
+			}
+		
+			@Override
+			public boolean leq(Object l, Object r) {
+				return SetUtils.isSupersetEquals(l, r);
+			}
+		
+			@Override
+			public Object glb(Object l, Object r) {
+				return SetUtils.union(l, r);
+			}
+		
+			@Override
+			public boolean geq(Object l, Object r) {
+				return SetUtils.isSubsetEquals(l, r);
+			}
+		}
+    ]|
+  ]
+    
+  map-class = ![
+  	java:type-dec |[
+		class MapLattice extends Lattice {
+			Lattice valueLattice;
+		
+			MapLattice(Lattice valueLattice) {
+				this.valueLattice = valueLattice;
+			}
+		
+			@Override
+			public Object bottom() {
+				return new HashMap();
+			}
+		
+			@Override
+			public Object lub(Object l, Object r) {
+				return MapUtils.union(valueLattice, l, r);
+			}
+		}  	
+  	]|
+  ]
+
+  lattice-to-class: LatticeDefParams(name, _, functions) -> ClassDeclaration(
+      []
+    , Id(<to-lattice-name> name)
+    , None()
+    , Some(SuperClass(ClassType([], Id("Lattice"), None())))
+    , None()
+    , <map(to-lattice-method);concat> functions
+    )
+  to-lattice-method: LatticePartType(_) -> []
+  to-lattice-method: Bottom(expr) -> <create-lattice-method(|"bottom")> expr
+  to-lattice-method: Top(expr) -> <create-lattice-method(|"top")> expr
+  to-lattice-method: Lub(l, r, expr) -> <create-lattice-method(|"lub", l, r)> expr
+  to-lattice-method: Glb(l, r, expr) -> <create-lattice-method(|"glb", l, r)> expr
+  to-lattice-method: Leq(l, r, expr) -> <create-lattice-boolean-method(|"leq", l, r)> expr
+  to-lattice-method: Geq(l, r, expr) -> <create-lattice-boolean-method(|"geq", l, r)> expr
+  to-lattice-method: NLeq(l, r, expr) -> <create-lattice-boolean-method(|"nleq", l, r)> expr
+   
+  create-lattice-method(|name, l, r): expr -> [MethodDecl(
+          [MarkerAnno(TypeName(Id("Override"))), Public()]
+        , MethodHeader(
+            ClassType(Id("Object"), None())
+          , Id(name)
+          , <create-paramlist> (l, r)
+          , []
+          , None()
+          )
+        , Block([Return(<transform-expr> expr)])
+        )]
+  create-lattice-method(|name): expr -> [MethodDecl(
+          [MarkerAnno(TypeName(Id("Override"))), Public()]
+        , MethodHeader(
+            ClassType(Id("Object"), None())
+          , Id("test")
+          , NoParams()
+          , []
+          , None()
+          )
+        , Block([Return(<transform-expr> expr)])
+        )] with debug
+  create-lattice-boolean-method(|name, l, r): expr -> [MethodDecl(
+          [MarkerAnno(TypeName(Id("Override"))), Public()]
+        , MethodHeader(
+            BooleanType()
+          , Id(name)
+          , <create-paramlist> (l, r)
+          , []
+          , None()
+          )
+        , Block([Return(CastPrimitive(BooleanType([]), <transform-expr> expr))])
+        )]
+  create-paramlist: (l, r) -> ParamList([FormalParam([], ClassType(Id("Object"), None()), VariableDecl(Id(<to-term-name> l)))], FormalParam([], ClassType(Id("Object"), None()), VariableDecl(Id(<to-term-name> r))))
+  
+  lattices-instances-class: r -> [
+    java:type-dec |[
+      class Lattices {
+        ~*members
+      }
+    ]|
+  ]
+  where
+    members := <concat> [
+      [<lattice-to-field> "MaySet", <lattice-to-field> "MustSet"],
+      <map(get-name; lattice-to-field)> r
+    ]
+  
+  get-name: LatticeDefParams(name, _, _) -> name
+  lattice-to-field: name -> FieldDecl(
+          [Public(), Static()]
+        , ClassType(Id("Lattice"), None())
+        , [ VariableDeclInit(
+              VariableDecl(Id(name))
+            , NewInstance(None(), [], Id(<to-lattice-name> name), [], None(), [])
+            )
+          ]
+        )
+  get-lattice: name -> ExpressionName(AmbiguousName(Id("Lattices")), name)

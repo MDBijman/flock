@@ -1,0 +1,87 @@
+module flock
+
+imports
+  desugar
+  pp
+  analysis
+  codegen/build
+
+rules // Debugging
+  
+  debug-show-aterm:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <guarantee-extension(|"aterm")> path
+    ; result   := node
+
+  debug-show-desugared:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <guarantee-extension(|"desugared.aterm")> path
+    ; result   := <desugar-all> node
+  
+  debug-show-java-ast:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <guarantee-extension(|"java.aterm")> path
+    ; result   := <flo-to-java-ast> node
+  
+  debug-show-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <guarantee-extension(|"java")> path
+    ; result   := <flo-to-java> node
+  
+  debug-show-cfgnode-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "CfgNode.java"]
+    ; result   := <flo-to-cfgnode-java; java-ast-to-code> node
+
+  debug-show-cfggraph-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "CfgGraph.java"]
+    ; result   := <flo-to-cfggraph-java; java-ast-to-code> node
+    
+  debug-show-setutils-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "SetUtils.java"]
+    ; result   := <flo-to-setutils-java; java-ast-to-code> node
+    
+  debug-show-maputils-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "MapUtils.java"]
+    ; result   := <flo-to-maputils-java; java-ast-to-code> node
+
+  debug-show-universalset-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "UniversalSet.java"]
+    ; result   := <flo-to-universalset-java; java-ast-to-code> node
+        
+  debug-show-property-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "Property.java"]
+    ; result   := <flo-to-property-java; java-ast-to-code> node
+
+  debug-show-lattice-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "Lattice.java"]
+    ; result   := <flo-to-lattice-java; java-ast-to-code> node
+    
+  debug-show-helper-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "Helpers.java"]
+    ; result   := <flo-to-helper-java; java-ast-to-code> node    
+    
+  debug-show-transfer-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <concat-strings> [<dirname> path, "/", "TransferFunction.java"]
+    ; result   := <flo-to-transfer-java; java-ast-to-code> node   

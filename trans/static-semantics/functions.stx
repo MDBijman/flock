@@ -1,0 +1,67 @@
+module static-semantics/functions
+
+imports
+  static-semantics/common
+  static-semantics/expr
+  static-semantics/type
+
+signature
+
+  sorts
+    FunDef
+    FunArg
+
+  constructors
+    FunDefParams : string * list(ID) * list(FunArg) * Expr -> FunDef
+    FunDefNoParams : string * list(FunArg) * Expr -> FunDef
+    Arg : string * TypeOrVar -> FunArg
+
+rules
+
+  funDefOk : scope * FunDef
+  funDefsOk maps funDefOk(*, list(*))
+  
+  typeOfFun : scope * string * list(ID) * list(FunArg) * Expr -> TYPE
+
+  funDefinedOnce : scope * string
+  noFunPropOverlap : string * list(TYPE) * list((path * (occurrence * TYPE)))
+
+  typeOfFunParam : scope * scope * FunArg -> TYPE
+  typeOfFunParams maps typeOfFunParam(*, *, list(*)) = list(*)
+
+rules
+
+  funDefOk(moduleScope, fun@FunDefNoParams(name, args, expr)) :-
+    @fun.type := typeOfFun(moduleScope, name, [], args, expr).
+
+  funDefOk(moduleScope, fun@FunDefParams(name, tArgs, args, expr)) :-
+    @fun.type := typeOfFun(moduleScope, name, tArgs, args, expr).
+
+  typeOfFun(moduleScope, name, typeParams, params, expr) = returnType :- {funType funScope paramTypes propWithFunNameResult}
+    @name.ref := name,
+    @name.type := funType,
+    new funScope,
+    _ == typesOfTypeParameters(funScope, typeParams),
+    funScope -P-> moduleScope,
+    moduleScope -> Function{name} with occurrenceType funType,
+    funDefinedOnce(moduleScope, name), // extracted to a separate rule so the error is located in the right place
+    occurrenceType of Property{name} in moduleScope |-> propWithFunNameResult,
+    noFunPropOverlap(name, paramTypes, propWithFunNameResult),
+    paramTypes == typeOfFunParams(moduleScope, funScope, params),
+    returnType == typeOfExpr(funScope, expr),
+    funType == FUNCTION(returnType, typeParams, paramTypes),
+    try { noUnificationVariablesInType(returnType) } | warning "The return type of this function is not well defined.".
+
+  funDefinedOnce(moduleScope, name) :-
+    occurrenceType of Function{name} in moduleScope |-> [_] | error $[The function [name] is declared more than once.].
+
+  noFunPropOverlap(name, [_], [_]) :-
+    false | error $[This function definition conflicts with the property definition [name]. Choose a different name or disambiguate by changing the number of parameters.].
+  noFunPropOverlap(_, _, _).
+
+  typeOfFunParam(moduleScope, funScope, Arg(name, type)) = paramType :-
+    @name.ref := name,
+    @name.type := paramType,
+    paramType == typeOfTypeOrVar(moduleScope, funScope, type),
+    funScope -> Variable{name} with occurrenceType paramType,
+    occurrenceType of Variable{name} in funScope |-> [_] | error $[The parameter [name] is declared more than once.].

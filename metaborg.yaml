@@ -1,0 +1,43 @@
+---
+id: org.example:flock:0.1.0-SNAPSHOT
+name: flock
+dependencies:
+  compile:
+  - org.metaborg:org.metaborg.meta.lang.esv:${metaborgVersion}
+  - org.metaborg:org.metaborg.meta.lang.template:${metaborgVersion}
+  - org.metaborg:statix.lang:${metaborgVersion}
+  - org.metaborg:lang.java:1.1.0-SNAPSHOT
+  source:
+  - org.metaborg:meta.lib.spoofax:${metaborgVersion}
+  - org.metaborg:statix.runtime:${metaborgVersion}
+  - org.metaborg:lang.java:1.1.0-SNAPSHOT
+pardonedLanguages:
+- EditorService
+- Stratego-Sugar
+- SDF
+exports:
+  - language: ATerm
+    directory: src-gen/statix
+language:
+  sdf:
+    pretty-print: flock
+    sdf2table: java
+    placeholder:
+      prefix: "$"
+  stratego:
+    format: jar
+    args:
+    - -la
+    - stratego-lib
+    - -la
+    - stratego-sglr
+    - -la
+    - stratego-gpp
+    - -la
+    - stratego-xtc
+    - -la
+    - stratego-aterm
+    - -la
+    - stratego-sdf
+    - -la
+    - strc

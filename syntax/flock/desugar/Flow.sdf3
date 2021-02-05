@@ -1,0 +1,22 @@
+module flock/desugar/Flow
+
+imports
+
+flock/Flow
+
+flock/Pattern
+flock/Common
+
+context-free syntax
+
+CFGChain.Chain = {CFGChainElement " -> "}+
+CFGRule.CFGRuleNoParams = [cfg [Root] [Pattern]]
+CFGRule.CFGRuleParams = [cfg [Root] [Pattern] = [{CFGChain ", "}+]]
+CFGChain.ChainNest = [[CFGChainElement] -> [{CFGChainElement " -> "}+]]
+CFGChainElement.Entry-DS = [entry]
+CFGChainElement.Exit-DS = [exit]
+CFGChainElement.Start-DS = [start]
+CFGChainElement.End-DS = [end]
+CFGChainElement.Recurse = [cfg [Var]]
+CFGChainElement.Prop = [[PropName] [Var]]
+CFGChainElement.Ref-DS = Var

@@ -1,0 +1,161 @@
+module static-semantics/helpers/flow-graph-validity
+
+imports
+
+  static-semantics/common
+  static-semantics/flow
+  static-semantics/helpers/bool
+  static-semantics/helpers/lists
+
+signature
+
+  namespaces
+    GraphVertex : string
+
+  name-resolution
+    resolve GraphVertex
+
+  relations
+    incomingEdgeFrom: occurrence -> string
+    outgoingEdgeTo: occurrence -> string
+
+  constraints
+
+    // Takes a control-flow rule and transforms it into a CFG graph.
+    buildCfgRuleGraph : scope * CFGRule -> (scope * list(string) * Root)
+
+    // Takes a CFG graph, and validates that there are no dangling nodes.
+    validateCfgRuleGraph : (scope * list(string) * Root)
+
+    addCfgChainToGraph : scope * scope * CFGChain -> list(string)
+    addCfgChainsToGraph maps addCfgChainToGraph(*, *, list(*)) = list(*)
+
+    processChainElements : scope * scope * list(CFGChainElement) -> list(string)
+
+    // Verifies that the source node can reach the destination node.
+    graphVertexCanReach : string * string * scope * list(string) -> StxBool
+    graphVerticesCanReach maps graphVertexCanReach(list(*), *, *, *) = list(*)
+
+    // Guarded version of graphVertexCanReach. This is used to avoid infinite recursion with graph cycles.
+    graphVertexCanReachGuard : string * string * scope * list(string) * StxBool -> StxBool
+    graphVerticesCanReachGuard maps graphVertexCanReachGuard(list(*), *, *, *, list(*)) = list(*)
+
+    // Verifies that the destination node can be reached by the source node.
+    graphVertexReachedBy : string * string * scope * list(string) -> StxBool
+    graphVerticesReachedBy maps graphVertexCanReach(*, list(*), *, *) = list(*)
+
+    // Guarded version of graphVertexReachedBy. This is used to avoid infinite recursion with graph cycles.
+    graphVertexReachedByGuard : string * string * scope * list(string) * StxBool -> StxBool
+    graphVerticesReachedByGuard maps graphVertexCanReachGuard(*, list(*), *, *, list(*)) = list(*)
+
+    // Generates messages for unmet constraints on reaches-to.
+    reachesToConstraint : StxBool * string * string
+    reachesToConstraints maps reachesToConstraint(list(*), list(*), *)
+    // Generates messages for unmet constraints on reached-from.
+    reachedFromConstraint : StxBool * string * string
+    reachedFromConstraints maps reachedFromConstraint(list(*), *, list(*))
+
+    graphQueryResultToString : (path * (occurrence * string)) -> string
+    graphQueryResultsToStrings maps graphQueryResultToString(list(*)) = list(*)
+
+    nameOfChainElement : scope * CFGChainElement -> string
+
+    stringListContainsPlural maps stringListContains(*, list(*)) = list(*)
+    stxOrList maps stxOr(list(*), list(*)) = list(*)
+
+rules
+
+  buildCfgRuleGraph(ruleScope, CFGRule(root, _, cfgChains)) = (graphScope, vertices, root) :- {vertexLists distinctVertices}
+    //try { false } | note $[Found vertices: [vertices]],
+    new graphScope,
+    addCfgChainsToGraph(graphScope, ruleScope, cfgChains) == vertexLists,
+    distinctVertices == stringListDistinct(concatStringLists(vertexLists)),
+    vertices == stringListWithout(distinctVertices, ["start", "end", "entry", "exit"]).
+
+  validateCfgRuleGraph((graphScope, vertices, NoRoot())) :- {reachedByEntry reachesExit}
+    //try { false } | note $[Reached from entry for [vertices]: [reachedByEntry]],
+    //try { false } | note $[Reaches exit for [vertices]: [reachesExit]],
+    reachedByEntry == graphVerticesReachedBy("entry", vertices, graphScope, []),
+    reachedFromConstraints(reachedByEntry, "entry", vertices),
+    reachesExit == stxOrList(
+      graphVerticesCanReach(vertices, "exit", graphScope, []),
+      graphVerticesCanReach(vertices, "end", graphScope, [])
+    ),
+    reachesToConstraints(reachesExit, vertices, "exit or end").
+
+  validateCfgRuleGraph((graphScope, vertices, Root())) :- {reachedByStart reachesEnd}
+    reachedByStart == graphVerticesReachedBy("start", vertices, graphScope, []),
+    reachedFromConstraints(reachedByStart, "start", vertices),
+    reachesEnd == graphVerticesCanReach(vertices, "end", graphScope, []),
+    reachesToConstraints(reachesEnd, vertices, "end").
+
+  addCfgChainToGraph(graphScope, ruleScope, Chain(firstElement, restElements)) =
+    processChainElements(graphScope, ruleScope, [firstElement | restElements]).
+
+  processChainElements(graphScope, ruleScope, [first, second]) = vertices :- {firstName secondName}
+    //try { false } | note $[Processing (base): [firstName] to [secondName]],
+    firstName == nameOfChainElement(ruleScope, first),
+    secondName == nameOfChainElement(ruleScope, second),
+    graphScope -> GraphVertex{firstName} with outgoingEdgeTo secondName,
+    graphScope -> GraphVertex{secondName} with incomingEdgeFrom firstName,
+    vertices == [firstName, secondName].
+
+  processChainElements(graphScope, ruleScope, [first, second | rest]) = vertices :- {firstName secondName restNames}
+    //try { false } | note $[Processing: [firstName] to [secondName]],
+    firstName == nameOfChainElement(ruleScope, first),
+    secondName == nameOfChainElement(ruleScope, second),
+    graphScope -> GraphVertex{firstName} with outgoingEdgeTo secondName,
+    graphScope -> GraphVertex{secondName} with incomingEdgeFrom firstName,
+    restNames == processChainElements(graphScope, ruleScope, [second | rest]),
+    vertices == [firstName | restNames].
+
+  graphVertexCanReach(same, same, _, _) = StxTrue().
+  graphVertexCanReach(source, dest, graphScope, seen) = reaches :- {outQueryResult outs nextSeen reachResults skipOuts}
+    //try {false} | note $[Outgoing for [source]: [outs]],
+    //try { false } | note $[[source] : [nextSeen] , [skipOuts]],
+    outgoingEdgeTo of GraphVertex{source} in graphScope |-> outQueryResult,
+    outs == stringListDistinct(graphQueryResultsToStrings(outQueryResult)),
+    nextSeen == [source | seen],
+    skipOuts == stringListContainsPlural(nextSeen, outs),
+    reachResults == graphVerticesCanReachGuard(outs, dest, graphScope, nextSeen, skipOuts),
+    reaches == stxBoolListContains(reachResults, StxTrue()).
+
+  // Determines whether this canReach should be skipped or not. If it should be skipped, return a negative result.
+  graphVertexCanReachGuard(_, _, _, _, StxTrue()) = StxFalse().
+  graphVertexCanReachGuard(source, dest, graphScope, seen, StxFalse()) =
+    graphVertexCanReach(source, dest, graphScope, seen).
+
+  graphVertexReachedBy(same, same, _, _) = StxTrue().
+  graphVertexReachedBy(source, dest, graphScope, seen) = reachedBy :- {inQueryResult ins nextSeen reachedByResults skipIns}
+    //try {false} | note $[Outgoing for [source]: [outs]],
+    //try { false } | note $[[source] : [nextSeen] , [skipOuts]],
+    incomingEdgeFrom of GraphVertex{dest} in graphScope |-> inQueryResult,
+    ins == stringListDistinct(graphQueryResultsToStrings(inQueryResult)),
+    nextSeen == [source | seen],
+    skipIns == stringListContainsPlural(nextSeen, ins),
+    reachedByResults == graphVerticesReachedByGuard(source, ins, graphScope, nextSeen, skipIns),
+    reachedBy == stxBoolListContains(reachedByResults, StxTrue()).
+
+  // Determines whether this reachedBy should be skipped or not. If it should be skipped, return a negative result.
+  graphVertexReachedByGuard(_, _, _, _, StxTrue()) = StxFalse().
+  graphVertexReachedByGuard(source, dest, graphScope, seen, StxFalse()) =
+    graphVertexReachedBy(source, dest, graphScope, seen).
+
+  reachesToConstraint(reaches, source, dest) :-
+    try { reaches == StxTrue() } | error $[The control-flow node [source] does not reach [dest].].
+  reachedFromConstraint(reaches, source, dest) :-
+    try { reaches == StxTrue() } | error $[The control-flow node [dest] cannot be reached from [source].].
+
+  graphQueryResultToString((_, (_, s))) = s.
+
+  nameOfChainElement(ruleScope, SubCFG(name)) = orthonym :- {queryResult}
+    //try { false} | note $[(graph validation) [name] has orthonym [orthonym].],
+    occurrenceOrthonym of Variable{name} in ruleScope |-> queryResult,
+    orthonym == determineOccurrenceOrthonym(queryResult, name).
+  nameOfChainElement(_, This()) = "this".
+  nameOfChainElement(_, Node(name)) = name.
+  nameOfChainElement(_, Entry()) = "entry".
+  nameOfChainElement(_, Exit()) = "exit".
+  nameOfChainElement(_, CFGChainElementStart()) = "start".
+  nameOfChainElement(_, CFGChainElementEnd()) = "end".
+

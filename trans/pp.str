@@ -1,0 +1,49 @@
+module pp
+
+imports
+
+  libstratego-gpp
+  libspoofax/sdf/pp
+  libspoofax/editor/refactoring/-
+  pp/flock-parenthesize
+  pp/flock-pp
+
+rules
+
+  editor-format:
+    (node, _, ast, path, project-path) -> (filename, result)
+    with
+      ext      := <get-extension> path
+    ; filename := <guarantee-extension(|$[pp.[ext]])> path
+    ; result   := <pp-debug> node
+
+rules
+  
+  pp-flock-string =
+    parenthesize-flock
+    ; prettyprint-flock-start-symbols
+    ; !V([], <id>)
+    ; box2text-string(|120)
+      
+  pp-partial-flock-string =
+    parenthesize-flock
+    ; prettyprint-flock
+    ; !V([], <id>)
+    ; box2text-string(|120)
+    
+  pp-partial-flock-string(|sort) =
+    parenthesize-flock
+    ; prettyprint-flock(|sort)
+    ; !V([], <id>)
+    ; box2text-string(|120)  
+      
+  pp-debug :
+    ast -> result
+    with
+       result := <pp-flock-string> ast
+    <+ <bottomup(try(not(is-string); not(is-list); not(pp-flock-string); debug(!"cannot pp ")))> ast
+    ;  result := ""
+
+rules
+  
+  construct-textual-change = construct-textual-change(pp-partial-flock-string, parenthesize, override-reconstruction, resugar)

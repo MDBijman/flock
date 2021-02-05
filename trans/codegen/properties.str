@@ -1,0 +1,104 @@
+module codegen/properties
+
+imports
+  codegen/universalset
+  codegen/util
+  codegen/lattices
+  codegen/transfer-functions
+  codegen/user-functions
+  codegen/nodes
+  
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  property-type-name = !"Property"
+  property-type-id = !Id(<property-type-name>)
+  property-type = !ClassType(<property-type-id>, None())
+  to-property-name = append-string(|<property-type-name>)
+
+  property-class: _ -> [
+  	java:type-dec |[
+  		public class Property {
+			String name;
+			public Lattice lattice;
+			public TransferFunction transfer;
+			public TransferFunction init;
+			public Object value;
+		
+			public Property(String name, Lattice lattice) {
+				this.name = name;
+				this.lattice = lattice;
+			}
+		
+			public Object getValue() {
+				return value;
+			}
+		
+			public String toGraphviz() {
+				return ~space + name + ~eq + valueToString(value);
+			}
+		
+			private static String valueToString(Object value) {
+				if (value instanceof UniversalSet) {
+					return ~str-rep;
+				}
+				if (value instanceof Set) {
+					return ~lbracket
+							+ String.join(~comma,
+									((Set<Object>) value).stream().map(v -> valueToString(v)).collect(Collectors.toList()))
+							+ ~rbracket;
+				}
+				if (value instanceof String) {
+					return ~quote + value + ~quote;
+				
+				}
+				return value.toString()
+					.replace(~backslash, ~doublebackslash)
+					.replace(~t, ~esc-t)
+					.replace(~n, ~esc-n)
+					.replace(~r, ~esc-r)
+					.replace(~q, ~esc-q)
+					.replace(~q2, ~esc-q2);
+			}
+		}
+  	]|
+  ]
+  where
+    str-rep  := <to-string-literal> "{...}"
+  ; space := <to-string-literal> " "
+  ; eq    := <to-string-literal> "="
+  ; lbracket := <to-string-literal> "{"
+  ; rbracket := <to-string-literal> "}"
+  ; comma    := <to-string-literal> ", "
+  ; quote    := <to-string-literal> "\\\\\\\""
+  ; backslash        := <to-string-literal> "\\\\"
+  ; doublebackslash  := <to-string-literal> "\\\\\\\\"
+  ; t     := <to-string-literal> "\\\\t"
+  ; esc-t := <to-string-literal> "\\\\\\t"
+  ; n     := <to-string-literal> "\\n"
+  ; esc-n := <to-string-literal> "\\\\n"    
+  ; r     := <to-string-literal> "\\r"
+  ; esc-r := <to-string-literal> "\\\\r"
+  ; q     := <to-string-literal> "\\'"
+  ; esc-q := <to-string-literal> "\\\\'"
+  ; q2     := <to-string-literal> "\\\""
+  ; esc-q2 := <to-string-literal> "\\\\\\\""  
+  
+  property-function: PropDef(name, _) -> java:method-dec |[
+    public static Object ~fun-name(Object o) {
+      CfgNode node = (CfgNode) o;
+      return node.getProperty(~prop-name).value;
+    }
+  ]|
+  where
+    fun-name := <to-function-name> name
+  ; prop-name := <to-string-literal> name
+  

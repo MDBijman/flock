@@ -1,0 +1,39 @@
+module codegen/util
+
+imports
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  to-string-literal: s -> <concat-strings> ["\"", s, "\""]
+  to-list-type: type@ClassType(name, args) -> <convert-classtype;to-list-type> type
+  to-list-type: type@ClassType(_, _, _) -> ClassType(Id("ArrayList"), Some(TypeArguments([type])))
+  to-set-type: type@ClassType(name, args) -> <convert-classtype;to-set-type> type
+  to-set-type: type@ClassType(_, _, _) -> ClassType(Id("Set"), Some(TypeArguments([type])))
+  to-iterable-type: type@ClassType(name, args) -> <convert-classtype;to-iterable-type> type
+  to-iterable-type: type@ClassType(_, _, _) -> ClassType(Id("Iterable"), Some(TypeArguments([type])))
+  convert-classtype: ClassType(name, args) -> ClassType([], name, args)
+  convert-classtype: ClassType(_, name, args) -> ClassType(name, args)
+  append-string(|suffix): str -> <concat-strings> [str, suffix]
+  prepend-string(|prefix): str -> <concat-strings> [prefix, str]
+  
+  contains(|target) = ?[];fail
+  contains(|target): x@[target|tail] -> x where <contains(|target)> tail
+  notcontains(|target) = ?[]
+  notcontains(|target): x@[head|tail] -> x where <equal> (target, head) < fail + <notcontains(|target)> tail
+  
+  to-term-name = append-string(|"_t")
+  to-set-name = append-string(|"_set")
+  
+  escape-string-expr: expr -> InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(expr, None(), Id("replace"), [StringLiteral("\"\\\\\""), StringLiteral("\"\\\\\\\\\"")]), None(), Id("replace"), [StringLiteral("\"\\t\""), StringLiteral("\"\\\\t\"")]), None(), Id("replace"), [StringLiteral("\"\\b\""), StringLiteral("\"\\\\b\"")]), None(), Id("replace"), [StringLiteral("\"\\n\""), StringLiteral("\"\\\\n\"")]), None(), Id("replace"), [StringLiteral("\"\\r\""), StringLiteral("\"\\\\r\"")]), None(), Id("replace"), [StringLiteral("\"\\f\""), StringLiteral("\"\\\\f\"")]), None(), Id("replace"), [StringLiteral("\"\\'\""), StringLiteral("\"\\\\'\"")]), None(), Id("replace"), [StringLiteral("\"\\\"\""), StringLiteral("\"\\\\\\\"\"")])
+  
+  lookup-with-default(transform, default): (key, []) -> <default> key
+  lookup-with-default(transform, default): (key, [(key, value)|_]) -> <transform> (key, value)
+  lookup-with-default(transform, default): (key, [_|tail]) -> <lookup-with-default(transform, default)> (key, tail)

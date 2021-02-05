@@ -1,0 +1,67 @@
+module codegen/user-functions
+
+imports
+  codegen/properties
+  codegen/util
+  codegen/nodes
+  codegen/expressions
+  
+  signatures/flock/-
+  signatures/flock/desugar/-
+
+  signatures/java/arrays/-
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  functions-type-name = !"UserFunctions"
+  functions-type-id = !Id(<functions-type-name>)
+  functions-type = !ClassType(<functions-type-id>, None())
+  
+  invoke-function(|func): args -> InvokeQExp(ExpressionName(<functions-type-id>), None(), Id(<to-function-name> func), args)
+  
+  to-function-name = append-string(|"_f")
+
+  user-functions-class(|r) = ![ClassDeclaration(
+      []
+    , <functions-type-id>
+    , None()
+    , None()
+    , None()
+    , <concat> [<filter(?PropDef(_, _));map(property-function)> r, <filter(?FunDefParams(_, _, _, _));map(user-function)> r]
+    )]
+
+  user-function: FunDefParams(name, _, params, expr) -> MethodDecl(
+          [Public(), Static()]
+        , MethodHeader(
+            ClassType(Id("Object"), None())
+          , Id(<to-function-name> name)
+          , <transform-params> params
+          , []
+          , None()
+          )
+        , Block([Return(<transform-expr(|<get-bindings> params)> expr)])
+        )
+  
+  transform-param: Arg(name, _) -> FormalParam([], ClassType(Id("Object"), None()), VariableDecl(Id(<to-term-name> name)))
+  
+  transform-params: [] -> NoParams()
+  transform-params: [h] -> SingleParam(<transform-param> h)
+  transform-params: l@[h|t] -> ParamList(first, last)
+  where
+    length := <length> l;
+    transformed := <map(transform-param)> l;
+    first := <take(|<dec> length)> transformed;
+    last := <last> transformed
+  
+  get-bindings: [] -> []
+  get-bindings: l@[h|t] -> <map(get-bindings);concat> l
+  get-bindings: Arg(var, _) -> [var]
+  

@@ -1,0 +1,89 @@
+module flock/Main
+
+imports
+
+flock/Common
+flock/Flow
+flock/Property
+flock/Type
+flock/Pattern
+flock/Expr
+flock/Function
+flock/Signature
+
+context-free syntax
+
+Module.Module =
+[module [ModuleName]
+
+[{Section "\n"}*]
+]
+
+Section.Imports =
+[imports
+  [{ModuleName "\n"}*]
+  [{ImportExternalSection "\n"}*]]
+
+ImportExternalSection.ImportExternals =
+[external
+  [{StrategoModName "\n"}*]]
+
+ModuleName = "external" {reject}
+
+Section.Signatures = [
+signature
+  [{Signature "\n"}*]  
+]
+
+ModuleName = "signature" {reject}
+
+Section.CFGRules =
+[control-flow rules
+  [{CFGRule "\n"}*]]
+
+ModuleName = "control-flow" {reject}
+StrategoModName = "control-flow" {reject}
+
+Section.LatticeDefs =
+[lattices
+  [{LatticeDef "\n"}*]]
+
+ModuleName = "lattices" {reject}
+StrategoModName = "lattices" {reject}
+
+Section.TypeDefs =
+[types
+  [{TypeDef "\n"}*]]
+
+ModuleName = "types" {reject}
+StrategoModName = "types" {reject}
+
+Section.PropDefs =
+[properties
+  [{PropDef "\n"}*]
+  [{PropDefExternalSection "\n"}*]]
+
+ModuleName = "properties" {reject}
+StrategoModName = "properties" {reject}
+
+PropDefExternalSection.PropDefExternals =
+[external
+  [{PropDef "\n"}*]]
+
+Section.PropRules =
+[property rules
+  [{PropRule "\n"}*]]
+
+ModuleName = "property" {reject}
+StrategoModName = "property" {reject}
+
+Section.FunDefs =
+[functions
+  [{FunDef "\n"}*]]
+
+ModuleName = "functions" {reject}
+StrategoModName = "functions" {reject}
+
+template options
+
+keyword -/- [A-Za-z\-]

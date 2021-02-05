@@ -1,0 +1,13 @@
+module Main
+
+imports
+
+  Syntax
+  Analysis
+  CodeGen
+
+language
+
+  extensions : flock
+
+  provider : target/metaborg/stratego.jar

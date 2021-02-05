@@ -1,0 +1,50 @@
+module static-semantics/helpers/lists
+
+imports
+
+  static-semantics/helpers/bool
+
+signature
+
+  constraints
+    stxBoolListContains : list(StxBool) * StxBool -> StxBool
+
+    stringListContains : list(string) * string -> StxBool
+    concatStringLists : list(list(string)) -> list(string)
+    concatTwoStringLists : list(string) * list(string) -> list(string)
+    stringListFilter : StxBool * string * list(string) -> list(string)
+    stringListWithout : list(string) * list(string) -> list(string)
+    stringListDistinct : list(string) -> list(string)
+    stringListDistinct_Recurse : list(string) * list(string) -> list(string)
+
+rules
+
+  stxBoolListContains([], _) = StxFalse().
+  stxBoolListContains([needle | t], needle) = StxTrue().
+  stxBoolListContains([_ | t], needle) = stxBoolListContains(t, needle).
+
+  stringListContains([], _) = StxFalse().
+  stringListContains([needle | t], needle) = StxTrue().
+  stringListContains([_ | t], needle) = stringListContains(t, needle).
+
+  concatStringLists([]) = [].
+  concatStringLists([l]) = l.
+  concatStringLists([ l, r | o ]) = concatStringLists([concatTwoStringLists(l, r) | o]).
+
+  concatTwoStringLists(l1, []) = l1.
+  concatTwoStringLists([], l2) = l2.
+  concatTwoStringLists([h | t], l2) = [h | concatTwoStringLists(t, l2)].
+
+  stringListFilter(StxFalse(), _, t) = t.
+  stringListFilter(StxTrue(), h, t) = [h | t].
+
+  stringListWithout([], _) = [].
+  stringListWithout([h | t], without) = result :- {excludeH}
+    excludeH == stringListContains(without, h),
+    result == stringListFilter(stxNeg(excludeH), h, stringListWithout(t, without)).
+
+  stringListDistinct(strings) = stringListDistinct_Recurse(strings, []).
+  stringListDistinct_Recurse([], _) = [].
+  stringListDistinct_Recurse([h | t], seen) = result :- {hSeen}
+    hSeen == stxNeg(stringListContains(seen, h)),
+    result == stringListFilter(hSeen, h, stringListDistinct_Recurse(t, [h | seen])).

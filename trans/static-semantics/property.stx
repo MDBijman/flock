@@ -1,0 +1,115 @@
+module static-semantics/property
+
+imports
+  static-semantics/common
+  static-semantics/expr
+  static-semantics/pattern
+  static-semantics/type
+
+signature
+
+  sorts
+    Binding
+    PropDef
+    PropPattern
+    PropRule
+    PropWhere
+
+  constructors
+    PropDef : PropName * Type -> PropDef
+
+    PropRule : PropName * PropPattern * Expr * PropWhere -> PropRule
+
+    Backward : Pattern * Var -> PropPattern
+    Forward : Var * Pattern -> PropPattern
+
+    Entry : Pattern -> Pattern
+    Exit : Pattern -> Pattern
+
+    PropPatternStart : Pattern -> PropPattern
+    PropPatternEnd : Pattern -> PropPattern
+
+    NoWhereClause : PropWhere
+    WhereClause : list(Binding) -> PropWhere
+
+    Binding : Var * Expr -> Binding
+
+  constraints
+
+    propRulePatternIsConstructor : TYPE * Pattern
+
+    propDefOk : scope * PropDef
+    propDefsOk maps propDefOk(*, list(*))
+
+    propRuleOk : scope * PropRule
+    propRulesOk maps propRuleOk(*, list(*))
+
+    scopeOfPropWhere : scope * PropWhere -> scope
+    scopeOfPropWhereBindings : scope * list(Binding) -> scope
+
+    propPatternOk : scope * TYPE * PropPattern
+
+rules
+
+  propRulePatternIsConstructor(INST(USERTYPE(_, _, _), []), _).
+  propRulePatternIsConstructor(t, _) :-
+    false | error $[A constructor without type parameters must be used as the root of a property rule pattern. The type [t] does not provide any such constructors.].
+
+  propDefOk(moduleScope, PropDef(propName, type)) :- {lattice}
+    @propName.ref := propName,
+    @propName.type := lattice,
+    lattice == typeOfLattice(moduleScope, new, type), // properties do not have type parameters
+    moduleScope -> Property{propName} with occurrenceType PROPERTY(lattice),
+    occurrenceType of Property{propName} in moduleScope |-> [(_, _)] | error $[The property [propName] is declared more than once.].
+
+  propRuleOk(moduleScope, PropRule(propName, propPattern, expr, where)) :- {propName' ruleScope whereScope instScope exprT lattice lName lTParams lType lScope lTArgs promotedLType}
+    @propName.ref := propName',
+    @propName.type := lattice,
+    new ruleScope,
+    ruleScope -P-> moduleScope,
+    occurrenceType of Property{propName} in moduleScope |-> [(_, (Property{propName'}, PROPERTY(lattice)))] | error $[The property [propName] could not be resolved uniquely.],
+    INST(LATTICE(lName, lTParams, lType, lScope), lTArgs) == lattice,
+    instScope == createInstTypeScope(lScope, lTParams, lTArgs),
+    promotedLType == promoteType(instScope, lType, lName, propName),
+    propPatternOk(ruleScope, promotedLType, propPattern),
+    whereScope == scopeOfPropWhere(ruleScope, where),
+    exprT == typeOfExpr(whereScope, expr),
+    typeAssignableTo(exprT, promotedLType).
+
+  propPatternOk(ruleScope, latticeType, Backward(propCFGNodePattern, var)) :- {patternType}
+    @var.ref := var, @var.type := latticeType,
+    ruleScope -> Variable{var},
+    patternType == typeOfPattern(ruleScope, propCFGNodePattern),
+    //propRulePatternIsConstructor(patternType, propCFGNodePattern),
+    ruleScope -> Variable{var} with occurrenceType latticeType,
+    occurrenceType of Variable{var} in ruleScope |-> [_] | error $[The variable [var] is declared more than once.].
+
+  propPatternOk(ruleScope, latticeType, Forward(var, propCFGNodePattern)) :- {patternType}
+    @var.ref := var, @var.type := latticeType,
+    ruleScope -> Variable{var},
+    patternType == typeOfPattern(ruleScope, propCFGNodePattern),
+    //propRulePatternIsConstructor(patternType, propCFGNodePattern),
+    ruleScope -> Variable{var} with occurrenceType latticeType,
+    occurrenceType of Variable{var} in ruleScope |-> [_] | error $[The variable [var] is declared more than once.].
+
+  propPatternOk(ruleScope, _, PropPatternStart(pattern)) :- {patternType}
+    //propRulePatternIsConstructor(patternType, pattern),
+    patternType == typeOfPattern(ruleScope, pattern).
+
+  propPatternOk(ruleScope, _, PropPatternEnd(pattern)) :- {patternType}
+    //propRulePatternIsConstructor(patternType, pattern),
+    patternType == typeOfPattern(ruleScope, pattern).
+
+  scopeOfPropWhere(ruleScope, NoWhereClause()) = ruleScope.
+  scopeOfPropWhere(ruleScope, WhereClause(bindings)) = scopeOfPropWhereBindings(ruleScope, bindings).
+
+  scopeOfPropWhereBindings(parentBindingScope, []) = parentBindingScope.
+  scopeOfPropWhereBindings(parentBindingScope, [Binding(name, expr) | t]) = result :- {thisBindingScope exprT}
+    @name.ref := name,
+    @name.type := exprT,
+    new thisBindingScope,
+    thisBindingScope -P-> parentBindingScope,
+    exprT == typeOfExpr(parentBindingScope, expr),
+    thisBindingScope -> Variable{name} with occurrenceType exprT,
+    occurrenceType of Variable{name} in thisBindingScope |-> [_] | error $[The variable [name] is declared more than once.],
+    result == scopeOfPropWhereBindings(thisBindingScope, t).

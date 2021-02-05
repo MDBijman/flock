@@ -1,0 +1,205 @@
+module codegen/expressions
+
+imports
+  codegen/util
+  codegen/setutils
+  codegen/lattices
+  codegen/properties
+  codegen/cfg-matcher
+  codegen/user-functions
+  codegen/helpers
+
+  signatures/flock/-
+  signatures/flock/desugar/-
+
+  signatures/java/arrays/-
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  // Overload - be careful, this can cause issues when bindings aren't passed correctly.
+  transform-expr = transform-expr(|[])
+  
+  // Sets
+  transform-expr(|bindings): SetLiteral(l) -> <set-create> <map(transform-expr)> l
+  transform-expr(|bindings): Contains(element, set) -> InvokeQExp(<transform-expr(|bindings)> set, None(), Id("contains"), [<transform-expr(|bindings)> element])
+  transform-expr(|bindings): SetComp(expr, _, _, predicates) -> <set-comp-body(|bindings);statements-to-expression> (expr, predicates)
+  transform-expr(|bindings): SetCompExprPredicate(x) -> <transform-expr(|bindings)> x
+  transform-expr(|bindings): Union(a, b) -> <set-union> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
+  transform-expr(|bindings): Difference(a, b) -> <set-difference> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
+  transform-expr(|bindings): Intersection(a, b) -> <set-intersection> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b] 
+  
+  // Maps
+  transform-expr(|bindings): MapLiteral(l) -> <map-create> <map(transform-binding(|bindings)); flatten-list> l
+  transform-expr(|bindings): MapComp(m@MapBinding(a, b), _, _, predicates) -> <map-comp-body(|bindings); statements-to-expression> (m, predicates)
+  transform-expr(|bindings): MapCompExprPredicate(x) -> <transform-expr(|bindings)> x
+  transform-binding(|bindings): MapBinding(k, v) -> [<transform-expr(|bindings)> k, <transform-expr(|bindings)> v]
+  
+  // Collections (runtime dispatched to collection type)
+  transform-expr(|bindings): TypedUnion(a, UserTypeParams(t, _), b) -> <lattice-lub(|t)> (a, b)
+  transform-expr(|bindings): TypedEmptyLiteral(Map(_, _)) -> <map-create> []
+  transform-expr(|bindings): TypedEmptyLiteral(Set(_))    -> <set-create> []
+  
+  // Lattices
+  transform-expr(|bindings): TopOf(lattice) -> <lattice-top(|lattice)>
+  transform-expr(|bindings): BottomOf(lattice) -> <lattice-bottom(|lattice)>
+  transform-expr(|bindings): Appl(LubOf(lattice), [l, r]) -> <lattice-lub(|lattice)> (l, r)
+  transform-expr(|bindings): Appl(GlbOf(lattice), [l, r]) -> <lattice-glb(|lattice)> (l, r)
+  transform-expr(|bindings): Appl(LeqOf(lattice), [l, r]) -> <lattice-leq(|lattice)> (l, r)
+  transform-expr(|bindings): Appl(GeqOf(lattice), [l, r]) -> <lattice-geq(|lattice)> (l, r)
+  transform-expr(|bindings): Appl(NLeqOf(lattice), [l, r]) -> <lattice-nleq(|lattice)> (l, r)
+  
+  // Functions
+  transform-expr(|bindings): PropOrAppl(func, arg) -> <invoke-function(|func)> [ExpressionName(Id(<to-term-name> arg))]
+  transform-expr(|bindings): Appl(Ref(func), args) -> <map(transform-expr);invoke-function(|func)> args
+  
+  // Literals
+  transform-expr(|bindings): ExprLiteral(literal) -> <transform-expr(|bindings)> literal
+  transform-expr(|bindings): StringLiteral(x) -> StringLiteral(x)
+  transform-expr(|bindings): IntLiteral(x) -> Deci(x)
+  transform-expr(|bindings): TrueLiteral() -> True()
+  transform-expr(|bindings): FalseLiteral() -> False()
+  
+  // Non-sets
+  transform-expr(|bindings): ExprExprRef(x) -> <transform-expr(|bindings)> x
+  transform-expr(|bindings): Ref(name) -> ExpressionName(Id(<to-term-name> name))
+  transform-expr(|bindings): NEq(l, r) -> Not(InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r]))
+  transform-expr(|bindings): Eq(l, r) -> InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r])
+  transform-expr(|bindings): Not(x) -> Not(<transform-expr(|bindings);cast-to-bool> x)
+  transform-expr(|bindings): Occurrence(namespace, name) -> Null() // FIXME
+  transform-expr(|bindings): Predicate(x) -> <transform-expr(|bindings)> x
+  transform-expr(|bindings): If(i, t, e) -> Cond(<transform-expr(|bindings);cast-to-bool> i, <transform-expr(|bindings)> t, <transform-expr(|bindings)> e)
+  transform-expr(|bindings): And(l, r) -> LazyAnd(<transform-expr(|bindings);cast-to-bool> l, <transform-expr(|bindings);cast-to-bool> r)
+  transform-expr(|bindings): Or(l, r) -> LazyOr(<transform-expr(|bindings);cast-to-bool> l, <transform-expr(|bindings);cast-to-bool> r)
+  transform-expr(|bindings): Add(l, r) -> <add-or-concat> (<transform-expr(|bindings)> l, <transform-expr(|bindings)> r)
+  transform-expr(|bindings): Sub(l, r) -> Sub(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Mul(l, r) -> Mul(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Div(l, r) -> Div(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Mod(l, r) -> Mod(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Neg(x) -> Minus(<transform-expr(|bindings);cast-to-int> x)
+  transform-expr(|bindings): Lt(l, r) -> Lt(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Lte(l, r) -> LtEq(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Gt(l, r) -> Gt(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Gte(l, r) -> GtEq(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): ExprTuple(l, r) -> NewInstance(None(), [], Id("StrategoTuple"), [], None(), [ NewArrayInit(ClassType([], Id("IStrategoTerm"), None()), [AnnotateDim([])], ArrayInit(<concat> [[<transform-expr(|bindings);cast-to-term> l], <map(transform-expr(|bindings);cast-to-term)> r])), Null()])
+  transform-expr(|bindings): TermIndex(r) -> Field(
+											    InvokeQExp(
+											      ExpressionName(Id(<to-term-name> r))
+											    , None()
+											    , Id("getProperty")
+											    , [StringLiteral("\"position\"")]
+											    )
+											  , Id("value")
+											  )
+											
+  
+  transform-expr(|bindings): x@Match(expr, arms) -> <concat;statements-to-expression> [
+      [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id(rootterm)), <transform-expr(|bindings);cast-to-term> expr)]))],
+      <map(match-arm-to-if(|rootterm, bindings))> arms,
+      [Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not match term '\""), ExpressionName(Id(rootterm))), StringLiteral("\"'.\""))]))]
+    ] where rootterm := <newname> "term"
+  
+  transform-expr(|bindings): ExprTerm(constructor, args) -> NewInstance(
+    None()
+  , []
+  , Id("StrategoAppl")
+  , []
+  , None()
+  , [ NewInstance(
+        None()
+      , []
+      , Id("StrategoConstructor")
+      , []
+      , None()
+      , [StringLiteral(<to-string-literal> constructor), Deci(<length;int-to-string> args)]
+      )
+    , NewArrayInit(
+        ClassType([], Id("IStrategoTerm"), None())
+      , [AnnotateDim([])]
+      , ArrayInit(<map(transform-expr(|bindings);cast-to-term)> args)
+      )
+    , Null()
+    ]
+  )
+  
+  // Unsupported expressions
+  transform-expr(|bindings) = debug(!"Unsupported expression found ");fail
+  
+  cast-to-int: expr -> CastPrimitive(NumericType([], Int()), expr)
+  cast-to-bool: expr -> CastPrimitive(BooleanType([]), expr)
+  
+  // set comprehension
+  set-comp-body(|bindings): (expr, predicates) -> [
+    LocVarDeclStm(LocalVarDecl([], ClassType(Id("Set"), None()), [ VariableDeclInit(VariableDecl(Id("result")), NewInstance(None(), [], Id("HashSet"), [], None(), []))])),
+    <set-comp-sources(|expr, nonsources, bindings)> sources,
+    Return(ExpressionName(Id("result")))
+  ]
+  where
+    sources := <filter(?SetCompExprSource(_))> predicates;
+    nonsources := <filter(not(?SetCompExprSource(_)))> predicates
+  
+  set-comp-sources(|expr, predicates, bindings): [] -> <set-comp-predicates(|bindings)> (expr, predicates)
+  set-comp-sources(|expr, predicates, bindings): [SetCompExprSource(SetSource(PatternVar(var), set))|tail] -> ForEach([], ClassType(Id("Object"), None()), VariableDecl(Id(<to-term-name> var)), <transform-expr(|bindings);cast-to-set> set, Block([<set-comp-sources(|expr, predicates, bindings)> tail]))
+  set-comp-predicates(|bindings): (expr, []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id("result")), None(), Id("add"), [<transform-expr(|bindings)> expr]))
+  set-comp-predicates(|bindings): (expr, [h|t]) -> If(<transform-expr(|bindings)> h, Block([<set-comp-predicates(|bindings)> (expr, t)]))
+  
+  // map comprehension
+  map-comp-body(|bindings): (bind, predicates) -> [
+    LocVarDeclStm(LocalVarDecl([], ClassType(Id("Map"), None()), [ VariableDeclInit(VariableDecl(Id("result")), NewInstance(None(), [], Id("HashMap"), [], None(), []))])),
+    <map-comp-sources(|bind, nonsources, bindings)> sources,
+    Return(ExpressionName(Id("result")))
+  ]
+  where
+    sources := <filter(?MapCompExprSource(_))> predicates;
+    nonsources := <filter(not(?MapCompExprSource(_)))> predicates
+  
+  map-comp-sources(|bind, predicates, bindings): [] -> <map-comp-predicates(|bindings)> (bind, predicates)
+  map-comp-sources(|bind, predicates, bindings): [MapCompExprSource(MapSource(PatternVar(k), PatternVar(v), map))|tail] -> 
+    ForEach(
+      [], 
+      ClassOrInterfaceTypeMember(ClassType(Id("Map"), None()), [], Id("Entry"), Some(TypeArguments([ ClassType([], Id("Object"), None()), ClassType([], Id("Object"), None())]))),
+      VariableDecl(Id("e")),
+      <transform-expr(|bindings); cast-to-map> map, 
+      Block(
+        [LocVarDeclStm(
+		  LocalVarDecl(
+		    []
+		  , ClassType(Id("Object"), None())
+		  , [ VariableDeclInit(
+		        VariableDecl(Id("k_t"))
+		      , InvokeQExp(ExpressionName(Id("e")), None(), Id("getKey"), [])
+		      )
+		    ]
+		  )
+		),
+		LocVarDeclStm(
+		  LocalVarDecl(
+		    []
+		  , ClassType(Id("Object"), None())
+		  , [ VariableDeclInit(
+		        VariableDecl(Id("v_t"))
+		      , InvokeQExp(ExpressionName(Id("e")), None(), Id("getValue"), [])
+		      )
+		    ]
+		  )
+		),
+        <map-comp-sources(|bind, predicates, bindings)> tail])) // add k and v init
+  map-comp-predicates(|bindings): (MapBinding(k, v), []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id("result")), None(), Id("put"), [<transform-expr(|bindings)> k, <transform-expr(|bindings)> v]))
+  map-comp-predicates(|bindings): (bind, [h|t]) -> If(<transform-expr(|bindings)> h, Block([<map-comp-predicates(|bindings)> (bind, t)]))
+    
+  // supplier wrapper
+  statements-to-expression: statements -> InvokeQExp(CastReference(ClassType([], Id("Supplier"), None()), [], LambdaExpressionWithBlock(Params(NoParams()), Block(statements))), None(), Id("get"), [])
+  
+  match-arm-to-if(|rootterm, bindings): MatchArm(pattern, expr) -> If(<cfg-pattern-to-condition(|rootterm, bindings)> pattern, Block(statements))
+  where
+    pattern-vars := <cfg-pattern-to-then(|rootterm, bindings)> pattern;
+    newbindings := <concat;uniq> [bindings, <get-bindings> pattern];
+    return := [Return(<transform-expr(|newbindings)> expr)];
+    statements := <concat> [pattern-vars, return]

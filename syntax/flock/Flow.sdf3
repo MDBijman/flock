@@ -1,0 +1,30 @@
+module flock/Flow
+
+imports
+
+flock/Common
+flock/Property
+flock/Pattern
+
+context-free syntax
+
+CFGRule.CFGRule = [[Root] [Pattern] = [{CFGChain ", "}+]]
+CFGChain.Chain = [[CFGChainElement] -> [{CFGChainElement " -> "}+]]
+CFGChainElement.Entry = [entry]
+CFGChainElement.Exit = [exit]
+CFGChainElement.CFGChainElementStart = [start]
+CFGChainElement.CFGChainElementEnd = [end]
+CFGChainElement.SubCFG = Var
+CFGChainElement.Node = [node [Var]]
+CFGChainElement.This = [this] {prefer}
+
+CFGRule.CFGNode = [node [Pattern]]
+
+context-free syntax
+
+Root.NoRoot =
+Root.Root = [root]
+
+template options
+
+  keyword -/- [A-Za-z\-]

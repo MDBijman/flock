@@ -1,0 +1,21 @@
+module flock/Pattern
+
+imports
+
+flock/Common
+flock/Expr
+
+context-free syntax
+
+Pattern.PatternTerm = [[ConsName]([{Pattern ", "}*])]
+Pattern.PatternTuple = [([Pattern], [{Pattern ", "}+])]
+Pattern.PatternWildcard = Wildcard
+Pattern.PatternVar = Var
+Pattern.At = [[Var]@[Pattern]]
+Pattern.PatternLiteral = Literal
+
+Wildcard.Wildcard = "_"
+
+template options
+
+keyword -/- [A-Za-z\-]

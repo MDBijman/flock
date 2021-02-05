@@ -1,0 +1,32 @@
+module flock/desugar/Main
+
+imports
+
+flock/Common
+flock/desugar/Expr
+flock/desugar/Flow
+flock/desugar/Function
+flock/desugar/Property
+flock/desugar/Type
+flock/Pattern
+flock/Property
+
+context-free syntax
+
+Module.Module =
+[module [ModuleName]
+
+[{Import "\n"}*]
+
+[{Definition "\n"}*]
+]
+
+Import.Import = [imports [ModuleName]] {prefer}
+Import.ExtImport = [imports external [StrategoModName]] {prefer}
+
+Definition = LatticeDef
+Definition = CFGRule
+Definition = PropDef
+Definition = PropRule
+Definition = TypeDef
+Definition = FunDef

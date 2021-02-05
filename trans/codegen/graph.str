@@ -1,0 +1,380 @@
+module codegen/graph
+
+imports
+  codegen/util
+  codegen/properties
+  codegen/lattices
+  codegen/nodes
+  codegen/cfg-matcher
+  
+  signatures/flock/-
+  signatures/flock/desugar/-
+  
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+rules
+  create-to-graphviz-method: r -> MethodDecl(
+          [Public()]
+        , MethodHeader(
+            ClassType(Id("String"), None())
+          , Id("toGraphviz")
+          , NoParams()
+          , []
+          , None()
+          )
+        , Block(
+            [ LocVarDeclStm(
+                LocalVarDecl(
+                  []
+                , ClassType(Id("String"), None())
+                , [VariableDeclInit(VariableDecl(Id("result")), StringLiteral("\"digraph G {\\n\""))]
+                )
+              )
+            , ForEach(
+                []
+              , <node-type>
+              , VariableDecl(Id("node"))
+              , Invoke(MethodName(Id("flatten")), [])
+              , Block(
+                  [ ExpressionStatement(
+                      AssignAdd(
+                        ExpressionName(Id("result")),
+                        Add(
+                          Add(
+                            Add(
+                              InvokeQExp(ExpressionName(Id("node")), None(), Id("hashCode"), [])
+                            , StringLiteral("\"[label=\\\"\"")
+                            )
+                          , <escape-string-expr> InvokeQExp(ExpressionName(AmbiguousName(Id("node")), Id("term")), None(), Id("toString"), [])
+                          )
+                        , StringLiteral("\"\\\"];\"")
+                        )
+                      )
+                    )
+                  , ForEach(
+                      []
+                    , <node-type>
+                    , VariableDecl(Id("child"))
+                    , ExpressionName(AmbiguousName(Id("node")), Id("children"))
+                    , Block(
+                        [ ExpressionStatement(
+                            AssignAdd(
+                              ExpressionName(Id("result"))
+                            , Add(
+                                Add(
+                                  Add(
+                                    InvokeQExp(ExpressionName(Id("node")), None(), Id("hashCode"), [])
+                                  , StringLiteral("\"->\"")
+                                  )
+                                , InvokeQExp(ExpressionName(Id("child")), None(), Id("hashCode"), [])
+                                )
+                              , StringLiteral("\";\\n\"")
+                              )
+                            )
+                          )
+                        ]
+                      )
+                    )
+                  ]
+                )
+              )
+            , ExpressionStatement(AssignAdd(ExpressionName(Id("result")), StringLiteral("\"}\\n\"")))
+            , Return(ExpressionName(Id("result")))
+            ]
+          )
+        )
+  
+  concat-sets = filter(?(PropDef(_, _)));concat-sets-internal
+  concat-sets-internal: [] -> StringLiteral("\"\\\"];\\n\"")
+  concat-sets-internal: [h@PropDef(_, _) | t] -> Add(<propdef-to-literal> h, <concat-sets-internal> t)
+  propdef-to-literal: PropDef(name, _) -> InvokeQExp(ExpressionName(AmbiguousName(Id("node")), Id(<to-property-name> name)), None(), Id("toGraphviz"), [])
+  
+  graph-type-id = !Id("CfgGraph")
+  graph-type = !ClassType(<graph-type-id>, None())
+  
+  graph-class(|r) = ![ClassDeclaration(
+      [Public()]
+    , <graph-type-id>
+    , None()
+    , None()
+    , None()
+    , [ FieldDecl(
+          [Public()]
+        , <node-set-type>
+        , [VariableDecl(Id("roots"))]
+        ),
+        FieldDecl(
+		  [Public()]
+		, ClassType(
+		    Id("HashMap")
+		  , Some(
+		      TypeArguments(
+		        [ ClassType([], Id("IStrategoTerm"), None())
+		        , ClassType([], Id("CfgNode"), None())
+		        ]
+		      )
+		    )
+		  )
+		, [VariableDecl(Id("termToNode"))]
+		)
+      , ConstrDecl(
+          [Public()]
+        , None()
+        , Id("CfgGraph")
+        , SingleParam(
+            FormalParam(
+              []
+            , <node-set-type>
+            , VariableDecl(Id("roots"))
+            )
+          )
+        , None()
+        , None()
+        , [ExpressionStatement(
+             Assign(Field(This(), Id("roots")), ExpressionName(Id("roots")))
+           ),
+           ExpressionStatement(
+			  Assign(
+			    Field(This(), Id("termToNode"))
+			  , NewInstance(None(), [], Id("HashMap"), [], None(), [])
+			  )
+		   ),
+           ForEach(
+			  []
+			, ClassType(Id("CfgNode"), None())
+			, VariableDecl(Id("t"))
+			, Invoke(MethodName(Id("flatten")), [])
+			, Block(
+			    [ ExpressionStatement(
+			        InvokeQExp(
+			          Field(This(), Id("termToNode"))
+			        , None()
+			        , Id("put")
+			        , [ExpressionName(AmbiguousName(Id("t")), Id("term")), ExpressionName(Id("t"))]
+			        )
+			      )
+			    ]
+			  )
+			)]
+        )
+      , MethodDecl(
+		  [Public()]
+		, MethodHeader(
+		    ClassType(Id("CfgNode"), None())
+		  , Id("getTermNode")
+		  , SingleParam(
+		      FormalParam(
+		        []
+		      , ClassType(Id("IStrategoTerm"), None())
+		      , VariableDecl(Id("t"))
+		      )
+		    )
+		  , []
+		  , None()
+		  )
+		, Block(
+		    [ Return(
+		        InvokeQExp(
+		          Field(This(), Id("termToNode"))
+		        , None()
+		        , Id("get")
+		        , [ExpressionName(Id("t"))]
+		        )
+		      )
+		    ]
+		  )
+		)
+      , MethodDecl(
+          [Public()]
+        , MethodHeader(
+            <node-set-type>
+          , Id("getRoots")
+          , NoParams()
+          , []
+          , None()
+          )
+        , Block([Return(Field(This(), Id("roots")))])
+        )
+      , <create-to-graphviz-method> r
+      , MethodDecl(
+          [Public()]
+        , MethodHeader(
+            <node-set-type>
+          , Id("flatten")
+          , NoParams()
+          , []
+          , None()
+          )
+        , Block(
+            [ LocVarDeclStm(
+                LocalVarDecl(
+                  []
+                , <node-set-type>
+                , [ VariableDeclInit(
+                      VariableDecl(Id("nodes"))
+                    , NewInstance(
+                        None()
+                      , []
+                      , Id("HashSet")
+                      , []
+                      , Some(Diamond())
+                      , []
+                      )
+                    )
+                  ]
+                )
+              )
+            , ForEach(
+                []
+              , <node-type>
+              , VariableDecl(Id("root"))
+              , ExpressionName(Id("roots"))
+              , Block(
+                  [ ExpressionStatement(
+                      InvokeQExp(
+                        ExpressionName(Id("nodes"))
+                      , None()
+                      , Id("addAll")
+                      , [InvokeQExp(ExpressionName(Id("root")), None(), Id("flatten"), [])]
+                      )
+                    )
+                  ]
+                )
+              )
+            , Return(ExpressionName(Id("nodes")))
+            ]
+          )
+        ),
+        <get-all-leaves-method>, <cfg-method>, <cfg-collector-method> r, <cfg-matcher-method> r
+      ]
+    )]
+  
+  get-newvalue-setters = filter(?PropDef(_, _)); map(propdef-to-newvalue)
+  
+  propdef-to-newvalue: PropDef(name, _) -> LocVarDeclStm(
+                      LocalVarDecl(
+                        []
+                      , ClassType(Id("Object"), None())
+                      , [ VariableDeclInit(
+                            VariableDecl(Id(<to-new-name> name))
+                          , InvokeQExp(
+                              Field(<make-property-get(|"node")> name, Id("transfer"))
+                            , None()
+                            , Id("eval")
+                            , [ExpressionName(Id("node"))]
+                            )
+                          )
+                        ]
+                      )
+                    )
+  
+  get-forward-updaters = get-forwards;map(name-to-updater);concat
+  get-backward-updaters = get-backwards;map(name-to-updater);concat
+  
+  name-to-updater: name -> [LocVarDeclStm(
+                                LocalVarDecl(
+                                  []
+                                , ClassType(Id("Object"), None())
+                                , [ VariableDeclInit(
+                                      VariableDecl(Id(<to-old-name> name))
+                                    , Field(<make-property-get(|"successor")> name, Id("value"))
+                                    )
+                                  ]
+                                )
+                              )
+                            , If(
+                                InvokeQExp(
+                                  Field(<make-property-get(|"node")> name, Id("lattice"))
+                                , None()
+                                , Id("nleq")
+                                , [ExpressionName(Id(<to-new-name> name)), ExpressionName(Id(<to-old-name> name))]
+                                )
+                              , Block(
+                                  [ ExpressionStatement(
+                                      Assign(
+                                        Field(<make-property-get(|"successor")> name, Id("value"))
+                                      , InvokeQExp(
+                                          Field(<make-property-get(|"node")> name, Id("lattice"))
+                                        , None()
+                                        , Id("lub")
+                                        , [ExpressionName(Id(<to-old-name> name)), ExpressionName(Id(<to-new-name> name))]
+                                        )
+                                      )
+                                    )
+                                  , ExpressionStatement(Assign(ExpressionName(Id("changed")), True()))
+                                  ]
+                                )
+                              )]
+  
+  to-new-name = append-string(|"_n")
+  to-old-name = append-string(|"_o")
+  
+  get-backwards = filter(?PropRule(_, Backward(_, _), _, _));map(get-name);uniq
+  get-forwards = filter(?PropRule(_, Forward(_, _), _, _));map(get-name);uniq
+  get-name: PropRule(name, _, _, _) -> name
+
+                    
+  get-all-leaves-method = !MethodDecl(
+      [Private(), Static()]
+    , MethodHeader(
+        <node-set-type>
+      , Id("getAllLeaves")
+      , SingleParam(
+          FormalParam(
+            []
+          , <node-set-type>
+          , VariableDecl(Id("input"))
+          )
+        )
+      , []
+      , None()
+      )
+    , Block(
+        [ LocVarDeclStm(
+            LocalVarDecl(
+              []
+            , <node-set-type>
+            , [ VariableDeclInit(
+                  VariableDecl(Id("result"))
+                , NewInstance(
+                    None()
+                  , []
+                  , Id("HashSet")
+                  , []
+                  , Some(Diamond())
+                  , []
+                  )
+                )
+              ]
+            )
+          )
+        , ForEach(
+            []
+          , <node-type>
+          , VariableDecl(Id("node"))
+          , ExpressionName(Id("input"))
+          , Block(
+              [ ExpressionStatement(
+                  InvokeQExp(
+                    ExpressionName(Id("result"))
+                  , None()
+                  , Id("addAll")
+                  , [InvokeQExp(ExpressionName(Id("node")), None(), Id("getLeaves"), [])]
+                  )
+                )
+              ]
+            )
+          )
+        , Return(ExpressionName(Id("result")))
+        ]
+      )
+    )
+    
