@@ -185,41 +185,35 @@ rules
   to-lattice-method: Geq(l, r, expr) -> <create-lattice-boolean-method(|"geq", l, r)> expr
   to-lattice-method: NLeq(l, r, expr) -> <create-lattice-boolean-method(|"nleq", l, r)> expr
    
-  create-lattice-method(|name, l, r): expr -> [MethodDecl(
-          [MarkerAnno(TypeName(Id("Override"))), Public()]
-        , MethodHeader(
-            ClassType(Id("Object"), None())
-          , Id(name)
-          , <create-paramlist> (l, r)
-          , []
-          , None()
-          )
-        , Block([Return(<transform-expr> expr)])
-        )]
-  create-lattice-method(|name): expr -> [MethodDecl(
-          [MarkerAnno(TypeName(Id("Override"))), Public()]
-        , MethodHeader(
-            ClassType(Id("Object"), None())
-          , Id("test")
-          , NoParams()
-          , []
-          , None()
-          )
-        , Block([Return(<transform-expr> expr)])
-        )] with debug
-  create-lattice-boolean-method(|name, l, r): expr -> [MethodDecl(
-          [MarkerAnno(TypeName(Id("Override"))), Public()]
-        , MethodHeader(
-            BooleanType()
-          , Id(name)
-          , <create-paramlist> (l, r)
-          , []
-          , None()
-          )
-        , Block([Return(CastPrimitive(BooleanType([]), <transform-expr> expr))])
-        )]
-  create-paramlist: (l, r) -> ParamList([FormalParam([], ClassType(Id("Object"), None()), VariableDecl(Id(<to-term-name> l)))], FormalParam([], ClassType(Id("Object"), None()), VariableDecl(Id(<to-term-name> r))))
+  create-lattice-method(|name, l, r): expr -> [java:method-dec |[
+    @Override
+    public Object ~name(Object ~lname, Object ~rname) {
+      return ~java-expr;
+    }
+  ]|] 
+  where
+    java-expr := <transform-expr> expr
+  ; lname := <to-term-name> l
+  ; rname := <to-term-name> r
   
+  create-lattice-method(|name): expr -> [java:method-dec |[
+    @Override
+    public Object ~name() {
+      return ~java-expr;
+    }
+  ]|] where java-expr := <transform-expr> expr
+
+  create-lattice-boolean-method(|name, l, r): expr -> [java:method-dec |[
+    @Override
+    public boolean ~name(Object ~lname, Object ~rname) {
+      return (boolean) ~java-expr;
+    }
+  ]|] 
+  where
+    java-expr := <transform-expr> expr
+  ; lname := <to-term-name> l
+  ; rname := <to-term-name> r
+
   lattices-instances-class: r -> [
     java:type-dec |[
       class Lattices {
