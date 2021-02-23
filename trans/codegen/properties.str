@@ -60,37 +60,20 @@ rules
 					return ~quote + value + ~quote;
 				
 				}
-				return value.toString()
-					.replace(~backslash, ~doublebackslash)
-					.replace(~t, ~esc-t)
-					.replace(~n, ~esc-n)
-					.replace(~r, ~esc-r)
-					.replace(~q, ~esc-q)
-					.replace(~q2, ~esc-q2);
+				return ~escaped-value;
 			}
 		}
   	]|
   ]
   where
-    str-rep  := <to-string-literal> "{...}"
+    escaped-value := <escape-string-expr> "value.toString()" 
+  ; str-rep  := <to-string-literal> "{...}"
   ; space := <to-string-literal> " "
   ; eq    := <to-string-literal> "="
   ; lbracket := <to-string-literal> "{"
   ; rbracket := <to-string-literal> "}"
   ; comma    := <to-string-literal> ", "
   ; quote    := <to-string-literal> "\\\\\\\""
-  ; backslash        := <to-string-literal> "\\\\"
-  ; doublebackslash  := <to-string-literal> "\\\\\\\\"
-  ; t     := <to-string-literal> "\\\\t"
-  ; esc-t := <to-string-literal> "\\\\\\t"
-  ; n     := <to-string-literal> "\\n"
-  ; esc-n := <to-string-literal> "\\\\n"    
-  ; r     := <to-string-literal> "\\r"
-  ; esc-r := <to-string-literal> "\\\\r"
-  ; q     := <to-string-literal> "\\'"
-  ; esc-q := <to-string-literal> "\\\\'"
-  ; q2     := <to-string-literal> "\\\""
-  ; esc-q2 := <to-string-literal> "\\\\\\\""  
   
   property-function: PropDef(name, _) -> java:method-dec |[
     public static Object ~fun-name(Object o) {

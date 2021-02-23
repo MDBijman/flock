@@ -1,0 +1,70 @@
+module instances
+
+imports
+  codegen/util
+
+strategies
+
+  analyses: _ -> [("live", |[false]|), ("values", |[true]|), ("alias", |[true]|)]
+
+  analysis-name: (a, _) -> a
+  analysis-is-forward: (_, a) -> a
+  
+  analysis-boundary-check: e -> java:bstm |[ if (e < intervalBoundary) continue; ]|
+  analysis-default-boundary: "examples/LiveVariables" -> java:expr |[ Long.MIN_VALUE ]|
+  analysis-default-boundary: "examples/ValueAnalysis" -> java:expr |[ Long.MAX_VALUE ]|
+  analysis-default-boundary: "examples/PointsToFlowAnalysis" -> java:expr |[ Long.MAX_VALUE ]|
+  
+  update-analysis-call: "live"  -> |[ LiveVariablesFlowAnalysis.updateDataAnalysis(new_live, dirtyNodes, boundary); ]|
+  update-analysis-call: "values" -> |[ ValueFlowAnalysis.updateDataAnalysis(new_values, dirtyNodes, boundary); ]|
+  update-analysis-call: "alias" -> |[ PointsToFlowAnalysis.updateDataAnalysis(new_alias, dirtyNodes, boundary); ]|
+  
+  remove-fact-block: "live" -> java:bstm* |[
+	boolean removedLiveness = false;
+	if (current.getProperty(~name) != null) {
+		Set<LivenessValue> lv = (Set<LivenessValue>) current.getProperty(~name).value;
+		assert lv != null;
+		removedLiveness = lv.removeIf(ll -> {
+			return ll.origin.getId() == toRemove.getId();
+		});			
+	}
+  ]|
+  where name := <to-string-literal> "live"
+  
+  remove-fact-block: "values" -> java:bstm* |[
+	boolean removedConst = false;
+	if (current.getProperty(~name) != null) {
+		HashMap<String, ValueValue> cv = (HashMap<String, ValueValue>) current.getProperty(~name).value;
+		assert cv != null;
+
+		 removedConst = cv.entrySet().removeIf(ll -> {
+			return ll.getValue().origin.contains(toRemove);
+		});
+	}
+  ]|
+  where name := <to-string-literal> "values"
+
+  remove-fact-block: "alias" -> java:bstm* |[
+	if (current.getProperty(~name) != null) {}
+  ]|
+  where name := <to-string-literal> "alias"
+
+  remove-fact-result: _ -> |[ removedLiveness || removedConst ]|
+
+  term-dependencies-block: _ -> java:bstm* |[
+	// Folding
+	if (TermUtils.isAppl(n.term, ~int, 1)) {
+		r.addAll(n.parents);
+	}
+	
+	// Propagation
+	for (CfgNode p : n.children) {
+		if (TermUtils.isAppl(p.term, ~assign, -1)) {
+			r.add(p);
+		}
+	}  
+  ]|
+  where
+    int := <to-string-literal> "Int"
+  ; assign := <to-string-literal> "Assign"
+  

@@ -30,7 +30,7 @@ rules
   to-lattice-name: Map(k, v) -> <append-string(|<lattice-type-name>)> "Map"
    
   lattice-classes(|r) = <filter(?LatticeDefParams(_, _, _));create-all-lattice-classes> r
-  create-all-lattice-classes: r -> <concat> [<lattices-instances-class> r, <mustset-class>, <mayset-class>, <map-class>, <map(lattice-to-class)> r]
+  create-all-lattice-classes: r -> <concat> [<lattice-instances-class> r, <mustset-class>, <mayset-class>, <map-class>, <map(lattice-to-class)> r]
   
   lattice-invocation(|lattice, f): args -> InvokeQExp(NewInstance(None(), [], Id(<to-lattice-name> lattice), [], None(), <lattice-to-constructor-args> lattice), None(), Id(f), <map(transform-expr)> args) with <debug> lattice
   lattice-top(|lattice) = <lattice-invocation(|lattice, "top")> []
@@ -46,7 +46,7 @@ rules
   
   lattice-class = ![
     java:type-dec |[
-	    abstract class Lattice {
+	    public abstract class Lattice {
 			public abstract Object bottom();
 		
 			public abstract Object lub(Object l, Object r);
@@ -214,7 +214,7 @@ rules
   ; lname := <to-term-name> l
   ; rname := <to-term-name> r
 
-  lattices-instances-class: r -> [
+  lattice-instances-class: r -> [
     java:type-dec |[
       class Lattices {
         ~*members

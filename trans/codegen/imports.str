@@ -23,10 +23,13 @@ rules
   split-typename-next: (xs, cs, [46|ys]) -> ([<reverse; implode-string> cs | xs], [], ys)
   
   all-imports = <map(create-import)> [
+  	"org.apache.commons.lang3.tuple.Pair",
+  	"org.strategoxt.lang.Context",
   	"org.spoofax.interpreter.terms.IStrategoTerm",
   	"org.spoofax.interpreter.terms.IStrategoAppl",
   	"org.spoofax.interpreter.terms.IStrategoTuple",
   	"org.spoofax.interpreter.terms.IStrategoList",
+  	"org.spoofax.interpreter.terms.IStrategoInt",
   	"org.spoofax.terms.io.TAFTermReader",
   	"org.spoofax.terms.TermFactory",
   	"java.io.IOException",
@@ -36,9 +39,13 @@ rules
   	"java.util.Set",
   	"java.util.HashMap",
   	"java.util.Map",
+  	"java.util.Stack",
+  	"java.util.Map.Entry",
    	"java.util.stream.Collectors",
   	"java.util.concurrent.LinkedBlockingQueue",
   	"java.util.Queue",
+  	"java.util.List",
+  	"java.util.ArrayList",
   	"java.util.Iterator",
   	"java.util.Collection",
   	"java.util.function.Supplier",
@@ -50,10 +57,16 @@ rules
   	"org.spoofax.terms.StrategoList",
   	"flock.subject.common.CfgGraph",
   	"flock.subject.common.CfgNode",
+  	"flock.subject.common.CfgNodeId",
   	"flock.subject.common.Helpers",
   	"flock.subject.common.Lattice",
   	"flock.subject.common.MapUtils",
   	"flock.subject.common.SetUtils",
   	"flock.subject.common.TransferFunction",
-  	"flock.subject.common.UniversalSet"
+  	"flock.subject.common.UniversalSet",
+  	"flock.subject.live.LivenessValue",
+  	"flock.subject.live.LiveVariablesFlowAnalysis",
+  	"flock.subject.alias.PointsToFlowAnalysis",
+  	"flock.subject.value.ValueFlowAnalysis",
+  	"flock.subject.value.ValueValue"
   ]

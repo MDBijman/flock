@@ -1,0 +1,154 @@
+module codegen/analysis
+
+imports
+  codegen/util
+  codegen/instances
+
+rules
+
+  analysis-class: analyses -> java:type-dec |[
+	  public class Analysis {
+		~*node-decls
+		~*methods
+	  }
+	]|
+  where
+    node-decls := <mapconcat(node-decl)> analyses
+  ; node-decl-inits := <mapconcat(node-decl-inits)> analyses
+  ; remove-fact := <remove-facts> analyses
+  ; updates* := <map(update-until-boundary)> analyses
+  ; term-deps := <get-term-deps> analyses
+  ; helpers* := <make-helpers; debug> analyses
+  ; methods := [
+	  java:classb-dec |[
+		public Analysis() {
+			~*node-decl-inits
+		}
+	  ]|,
+      helpers*,
+      updates*,
+      term-deps,
+      remove-fact
+    ]
+  
+  node-decl: analysis -> java:classb-dec* |[
+	public HashSet<CfgNode> ~dirty-name;
+	public HashSet<CfgNode> ~new-name;
+	public boolean ~is-forward;
+  ]|
+  where
+    name := <analysis-name>
+  ; dirty-name := $[dirty_[name]]
+  ; new-name := $[new_[name]]
+  ; is-forward := $[is_forward_[name]]
+  
+  node-decl-inits: analysis -> java:bstm* |[
+    ~dirty-name = new HashSet<CfgNode>();
+    ~new-name = new HashSet<CfgNode>();
+    ~is-forward = ~forward;
+  ]|
+  where
+    name := <analysis-name> analysis
+  ; forward := <analysis-is-forward> analysis
+  ; is-forward := $[is_forward_[name]]
+  ; dirty-name := $[dirty_[name]]
+  ; new-name := $[new_[name]]
+  
+  update-until-boundary: analysis -> java:method-dec |[
+    public void ~method-name(HashMap<CfgNodeId, Long> idToInterval, CfgNodeId id) {
+		long boundary = idToInterval.get(id);
+		Set<CfgNode> dirtyNodes = new HashSet<>(~dirty-set);
+		
+		for (CfgNode n : ~dirty-set)
+			dirtyNodes.addAll(getTermDependencies(n));
+		for (CfgNode n : ~new-set)
+			dirtyNodes.addAll(getTermDependencies(n));
+
+		~analysis-call
+
+		~dirty-set.removeIf(n -> ~boundary-expr);
+		~new-set.removeIf(n -> ~boundary-expr);
+    }
+  ]|
+  where
+    name := <analysis-name> analysis
+  ; is-forward := <analysis-is-forward> analysis
+  ; method-name := $[updateUntilBoundary_[name]]
+  ; dirty-set := $[dirty_[name]]
+  ; new-set := $[new_[name]]
+  ; analysis-call := <update-analysis-call> name
+  ; boundary-expr := <boundary-expression(||[idToInterval.get(n.id)]|, java:expr |[boundary]|)> is-forward
+
+  boundary-expression(|lhs, rhs): |[ false ]| -> |[ ~lhs >= ~rhs ]|
+  boundary-expression(|lhs, rhs): |[ true  ]| -> |[ ~lhs <= ~rhs ]|
+
+  remove-facts: analyses -> java:method-dec |[
+	public static boolean removeFact(Context context, CfgNode current, CfgNodeId toRemove) {
+		~*remove-fact-blocks	
+		return ~remove-fact-res;
+	}
+  ]|
+  where
+    remove-fact-blocks := <mapconcat(analysis-name; remove-fact-block)> analyses
+  ; remove-fact-res    := <remove-fact-result> ()
+   
+  get-term-deps: _ -> java:method-dec |[
+	public static Set<CfgNode> getTermDependencies(CfgNode n) {
+		~bstm*:get-term-deps-block
+		return r;
+	}  
+  ]|
+  where get-term-deps-block := [
+    java:bstm |[ Set<CfgNode> r = new HashSet<>(); ]|
+  | <term-dependencies-block>
+  ]
+  
+  make-helpers: analyses -> java:classb-dec* |[
+    public List<Set<CfgNode>> getDirtySets() {
+      
+      ~*add-to-dirty-set
+      return dirtySets;
+    }
+    
+    public List<Set<CfgNode>> getNewSets() {
+      ~*add-to-new-set
+      return newSets;
+    }
+      
+  	public void addToDirty(CfgNode n) {
+		~*add-dirty-stmts
+	}
+
+	public void addToNew(CfgNode n) {
+		~*add-new-stmts
+	}
+
+	public void removeFromDirty(Set<CfgNodeId> removedIds) {
+		~*remove-dirty-stmts
+	}
+
+	public void removeFromNew(Set<CfgNodeId> removedIds) {
+		~*remove-new-stmts
+	}
+  ]|
+  where
+    add-to-dirty-set := [
+      java:bstm |[ ArrayList<Set<CfgNode>> dirtySets = new ArrayList<>(); ]|
+    | <map(analysis-name; add-to-dirty-set)> analyses
+    ]
+  ; add-to-new-set := [
+      java:bstm |[ ArrayList<Set<CfgNode>> newSets = new ArrayList<>(); ]|
+    | <map(analysis-name; add-to-new-set)> analyses
+    ]
+  ; add-dirty-stmts := <map(analysis-name; add-dirty)> analyses
+  ; add-new-stmts   := <map(analysis-name; add-new)> analyses
+  ; remove-dirty-stmts := <map(analysis-name; remove-dirty)> analyses
+  ; remove-new-stmts   := <map(analysis-name; remove-new)> analyses
+  
+  add-to-dirty-set: a -> java:bstm |[ dirtySets.add(this.~name); ]| where name := $[dirty_[a]]
+  add-to-new-set: a -> java:bstm |[ newSets.add(this.~name); ]| where name := $[new_[a]]
+  add-dirty: a -> java:bstm |[ ~name.add(n); ]| where name := $[dirty_[a]]
+  add-new:   a -> java:bstm |[ ~name.add(n); ]| where name := $[new_[a]]
+  remove-dirty: a -> java:bstm |[ ~name.removeIf(n -> removedIds.contains(n.id)); ]| where name := $[dirty_[a]]
+  remove-new:   a -> java:bstm |[ ~name.removeIf(n -> removedIds.contains(n.id)); ]| where name := $[new_[a]]
+    

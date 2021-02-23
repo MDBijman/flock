@@ -1,6 +1,7 @@
 module codegen/helpers
 
 imports
+  codegen/util
   signatures/java/types/-
   signatures/java/classes/-
   signatures/java/expressions/-
@@ -15,417 +16,58 @@ rules
   cast-to-term: expr -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("toTerm"), [expr])
   get-subterm(|index): expr -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("at"), [expr, Deci(<int-to-string> index)])
   add-or-concat: (l, r) -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("add"), [l, r])
-  helper-class = ![ClassDeclaration(
-      []
-    , Id("Helpers")
-    , None()
-    , None()
-    , None()
-    , [ MethodDecl(
-          [Public(), Static()]
-        , MethodHeader(
-            ClassType(Id("IStrategoTerm"), None())
-          , Id("toTerm")
-          , SingleParam(
-              FormalParam(
-                []
-              , ClassType(Id("Object"), None())
-              , VariableDecl(Id("o"))
-              )
-            )
-          , []
-          , None()
-          )
-        , Block(
-            [ If(
-                InstanceOf(
-                  ExpressionName(Id("o"))
-                , ClassType([], Id("IStrategoTerm"), None())
-                )
-              , Block(
-                  [ Return(
-                      CastReference(
-                        ClassType([], Id("IStrategoTerm"), None())
-                      , []
-                      , ExpressionName(Id("o"))
-                      )
-                    )
-                  ]
-                )
-              )
-            , If(
-                InstanceOf(
-                  ExpressionName(Id("o"))
-                , ClassType([], Id("Integer"), None())
-                )
-              , Block(
-                  [ Return(
-                      NewInstance(
-                        None()
-                      , []
-                      , Id("StrategoInt")
-                      , []
-                      , None()
-                      , [CastPrimitive(NumericType([], Int()), ExpressionName(Id("o")))]
-                      )
-                    )
-                  ]
-                )
-              )
-            , If(
-                InstanceOf(
-                  ExpressionName(Id("o"))
-                , ClassType([], Id("String"), None())
-                )
-              , Block(
-                  [ Return(
-                      NewInstance(
-                        None()
-                      , []
-                      , Id("StrategoString")
-                      , []
-                      , None()
-                      , [ CastReference(
-                            ClassType([], Id("String"), None())
-                          , []
-                          , ExpressionName(Id("o"))
-                          )
-                        , Null()
-                        ]
-                      )
-                    )
-                  ]
-                )
-              )
-            , If(
-                InstanceOf(
-                  ExpressionName(Id("o"))
-                , ClassType([], Id("Set"), None())
-                )
-              , Block(
-                  [ LocVarDeclStm(
-                      LocalVarDecl(
-                        []
-                      , ClassType(Id("Set"), None())
-                      , [ VariableDeclInit(
-                            VariableDecl(Id("s"))
-                          , CastReference(
-                              ClassType([], Id("Set"), None())
-                            , []
-                            , ExpressionName(Id("o"))
-                            )
-                          )
-                        ]
-                      )
-                    )
-                  , LocVarDeclStm(
-                      LocalVarDecl(
-                        []
-                      , ArrayTypeClassType(ClassType(Id("Object"), None()), [AnnotateDim([])])
-                      , [ VariableDeclInit(
-                            VariableDecl(Id("elements"))
-                          , InvokeQExp(ExpressionName(Id("s")), None(), Id("toArray"), [])
-                          )
-                        ]
-                      )
-                    )
-                  , LocVarDeclStm(
-                      LocalVarDecl(
-                        []
-                      , ClassType(Id("IStrategoList"), None())
-                      , [ VariableDeclInit(
-                            VariableDecl(Id("result"))
-                          , NewInstance(
-                              None()
-                            , []
-                            , Id("StrategoList")
-                            , []
-                            , None()
-                            , [ Invoke(
-                                  MethodName(Id("toTerm"))
-                                , [ ArrayAccess(
-                                      ExpressionName(Id("elements"))
-                                    , Sub(
-                                        ExpressionName(AmbiguousName(Id("elements")), Id("length"))
-                                      , Deci("1")
-                                      )
-                                    )
-                                  ]
-                                )
-                              , Null()
-                              , Null()
-                              ]
-                            )
-                          )
-                        ]
-                      )
-                    )
-                  , For(
-                      VarDecls(
-                        []
-                      , NumericType(Int())
-                      , [ VariableDeclInit(
-                            VariableDecl(Id("i"))
-                          , Sub(
-                              ExpressionName(AmbiguousName(Id("elements")), Id("length"))
-                            , Deci("2")
-                            )
-                          )
-                        ]
-                      )
-                    , Some(GtEq(ExpressionName(Id("i")), Deci("0")))
-                    , ExprList([PostDecr(ExpressionName(Id("i")))])
-                    , Block(
-                        [ ExpressionStatement(
-                            Assign(
-                              ExpressionName(Id("result"))
-                            , NewInstance(
-                                None()
-                              , []
-                              , Id("StrategoList")
-                              , []
-                              , None()
-                              , [ Invoke(
-                                    MethodName(Id("toTerm"))
-                                  , [ArrayAccess(ExpressionName(Id("elements")), ExpressionName(Id("i")))]
-                                  )
-                                , ExpressionName(Id("result"))
-                                , Null()
-                                ]
-                              )
-                            )
-                          )
-                        ]
-                      )
-                    )
-                  , Return(ExpressionName(Id("result")))
-                  ]
-                )
-              )
-            , Throw(
-                NewInstance(
-                  None()
-                , []
-                , Id("RuntimeException")
-                , []
-                , None()
-                , [StringLiteral("\"Could not identify proper term type.\"")]
-                )
-              )
-            ]
-          )
-        )
-      , MethodDecl(
-          [Public(), Static()]
-        , MethodHeader(
-            ClassType(Id("IStrategoTerm"), None())
-          , Id("at")
-          , ParamList(
-              [FormalParam(
-                 []
-               , ClassType(Id("IStrategoTerm"), None())
-               , VariableDecl(Id("term"))
-               )]
-            , FormalParam([], NumericType(Int()), VariableDecl(Id("index")))
-            )
-          , []
-          , None()
-          )
-        , Block(
-            [ If(
-                InstanceOf(
-                  ExpressionName(Id("term"))
-                , ClassType([], Id("IStrategoTuple"), None())
-                )
-              , Block(
-                  [ LocVarDeclStm(
-                      LocalVarDecl(
-                        []
-                      , ClassType(Id("IStrategoTuple"), None())
-                      , [ VariableDeclInit(
-                            VariableDecl(Id("tuple"))
-                          , CastReference(
-                              ClassType([], Id("IStrategoTuple"), None())
-                            , []
-                            , ExpressionName(Id("term"))
-                            )
-                          )
-                        ]
-                      )
-                    )
-                  , Return(
-                      InvokeQExp(
-                        ExpressionName(Id("tuple"))
-                      , None()
-                      , Id("get")
-                      , [ExpressionName(Id("index"))]
-                      )
-                    )
-                  ]
-                )
-              )
-            , LocVarDeclStm(
-                LocalVarDecl(
-                  []
-                , ClassType(Id("IStrategoAppl"), None())
-                , [ VariableDeclInit(
-                      VariableDecl(Id("appl"))
-                    , CastReference(
-                        ClassType([], Id("IStrategoAppl"), None())
-                      , []
-                      , ExpressionName(Id("term"))
-                      )
-                    )
-                  ]
-                )
-              )
-            , Return(
-                InvokeQExp(
-                  ExpressionName(Id("appl"))
-                , None()
-                , Id("getSubterm")
-                , [ExpressionName(Id("index"))]
-                )
-              )
-            ]
-          )
-        )
-      , MethodDecl(
-          [Public(), Static()]
-        , MethodHeader(
-            ClassType(Id("Object"), None())
-          , Id("add")
-          , ParamList(
-              [FormalParam(
-                 []
-               , ClassType(Id("Object"), None())
-               , VariableDecl(Id("l"))
-               )]
-            , FormalParam(
-                []
-              , ClassType(Id("Object"), None())
-              , VariableDecl(Id("r"))
-              )
-            )
-          , []
-          , None()
-          )
-        , Block(
-            [ ExpressionStatement(
-                Assign(
-                  ExpressionName(Id("l"))
-                , Invoke(MethodName(Id("extractPrimitive")), [ExpressionName(Id("l"))])
-                )
-              )
-            , ExpressionStatement(
-                Assign(
-                  ExpressionName(Id("r"))
-                , Invoke(MethodName(Id("extractPrimitive")), [ExpressionName(Id("r"))])
-                )
-              )
-            , If(
-                LazyAnd(
-                  InstanceOf(
-                    ExpressionName(Id("l"))
-                  , ClassType([], Id("Integer"), None())
-                  )
-                , InstanceOf(
-                    ExpressionName(Id("r"))
-                  , ClassType([], Id("Integer"), None())
-                  )
-                )
-              , Block(
-                  [ Return(
-                      Add(
-                        CastPrimitive(NumericType([], Int()), ExpressionName(Id("l")))
-                      , CastPrimitive(NumericType([], Int()), ExpressionName(Id("r")))
-                      )
-                    )
-                  ]
-                )
-              )
-            , Return(
-                Add(
-                  InvokeQExp(ExpressionName(Id("l")), None(), Id("toString"), [])
-                , InvokeQExp(ExpressionName(Id("r")), None(), Id("toString"), [])
-                )
-              )
-            ]
-          )
-        )
-      , MethodDecl(
-          [Public(), Static()]
-        , MethodHeader(
-            ClassType(Id("Object"), None())
-          , Id("extractPrimitive")
-          , SingleParam(
-              FormalParam(
-                []
-              , ClassType(Id("Object"), None())
-              , VariableDecl(Id("o"))
-              )
-            )
-          , []
-          , None()
-          )
-        , Block(
-            [ If(
-                InstanceOf(
-                  ExpressionName(Id("o"))
-                , ClassType([], Id("StrategoInt"), None())
-                )
-              , Block(
-                  [ LocVarDeclStm(
-                      LocalVarDecl(
-                        []
-                      , ClassType(Id("StrategoInt"), None())
-                      , [ VariableDeclInit(
-                            VariableDecl(Id("term"))
-                          , CastReference(
-                              ClassType([], Id("StrategoInt"), None())
-                            , []
-                            , ExpressionName(Id("o"))
-                            )
-                          )
-                        ]
-                      )
-                    )
-                  , Return(
-                      InvokeQExp(ExpressionName(Id("term")), None(), Id("intValue"), [])
-                    )
-                  ]
-                )
-              )
-            , If(
-                InstanceOf(
-                  ExpressionName(Id("o"))
-                , ClassType([], Id("StrategoString"), None())
-                )
-              , Block(
-                  [ LocVarDeclStm(
-                      LocalVarDecl(
-                        []
-                      , ClassType(Id("StrategoString"), None())
-                      , [ VariableDeclInit(
-                            VariableDecl(Id("term"))
-                          , CastReference(
-                              ClassType([], Id("StrategoString"), None())
-                            , []
-                            , ExpressionName(Id("o"))
-                            )
-                          )
-                        ]
-                      )
-                    )
-                  , Return(
-                      InvokeQExp(ExpressionName(Id("term")), None(), Id("stringValue"), [])
-                    )
-                  ]
-                )
-              )
-            , Return(ExpressionName(Id("o")))
-            ]
-          )
-        )
-      ]
-    )]
+  helper-class: _ -> [java:type-dec |[
+	public class Helpers {
+		public static IStrategoTerm toTerm(Object o) {
+			if (o instanceof IStrategoTerm) {
+				return (IStrategoTerm) o;
+			}
+			if (o instanceof Integer) {
+				return new StrategoInt((int) o);
+			}
+			if (o instanceof String) {
+				return new StrategoString((String) o, null);
+			}
+			if (o instanceof Set) {
+				Set s = (Set) o;
+				Object[] elements = s.toArray();
+				IStrategoList result = new StrategoList(toTerm(elements[elements.length - 1]), null, null);
+				for (int i = elements.length - 2; i >= 0; i--) {
+					result = new StrategoList(toTerm(elements[i]), result, null);
+				}
+				return result;
+			}
+			throw new RuntimeException(~runtime-exception);
+		}
+	
+		public static IStrategoTerm at(IStrategoTerm term, int index) {
+			if (term instanceof IStrategoTuple) {
+				IStrategoTuple tuple = (IStrategoTuple) term;
+				return tuple.get(index);
+			}
+			IStrategoAppl appl = (IStrategoAppl) term;
+			return appl.getSubterm(index);
+		}
+	
+		public static Object add(Object l, Object r) {
+			l = extractPrimitive(l);
+			r = extractPrimitive(r);
+			if (l instanceof Integer && r instanceof Integer) {
+				return (int) l + (int) r;
+			}
+			return l.toString() + r.toString();
+		}
+	
+		public static Object extractPrimitive(Object o) {
+			if (o instanceof StrategoInt) {
+				StrategoInt term = (StrategoInt) o;
+				return term.intValue();
+			}
+			if (o instanceof StrategoString) {
+				StrategoString term = (StrategoString) o;
+				return term.stringValue();
+			}
+			return o;
+		}
+	}
+  ]|] where runtime-exception := <to-string-literal> "Could not identify proper term type."

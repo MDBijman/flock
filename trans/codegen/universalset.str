@@ -18,7 +18,7 @@ rules
   
   universalset-class: _ -> [
 	  java:type-dec |[
-		final class UniversalSet implements Set {
+		public final class UniversalSet implements Set {
 			@Override
 			public int size() {
 				return Integer.MAX_VALUE;

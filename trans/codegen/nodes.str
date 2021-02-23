@@ -26,496 +26,103 @@ rules
   node-type-id = !Id(<node-type-name>)
   node-type = !ClassType(<node-type-id>, None())
   node-set-type = node-type;to-set-type
-  
-  node-class(|r) = ![ClassDeclaration([], <node-type-id>, None(), None(), None(), <concat> [/*<create-analysis-fields> r, */<create-constructor> r, <node-class-generic-body>/*, <create-node-factory> r*/])]
-  
-  node-class-generic-body = ![ FieldDecl(
-		  [Public()]
-		, ClassType(
-		    Id("HashMap")
-		  , Some(
-		      TypeArguments(
-		        [ ClassType([], Id("String"), None())
-		        , ClassType([], Id("Property"), None())
-		        ]
-		      )
-		    )
-		  )
-		, [VariableDecl(Id("properties"))]
-		)
-      , FieldDecl(
-          [Public()]
-        , ClassType(Id("IStrategoTerm"), None())
-        , [VariableDecl(Id("term"))]
-        )
-      , FieldDecl(
-          [Public()]
-        , <node-set-type>
-        , [VariableDecl(Id("children"))]
-        )
-      , FieldDecl(
-          [Public()]
-        , <node-set-type>
-        , [VariableDecl(Id("parents"))]
-        ),
-        MethodDecl(
-		  [Public()]
-		, MethodHeader(
-		    Void()
-		  , Id("addProperty")
-		  , ParamList(
-		      [FormalParam(
-		         []
-		       , ClassType(Id("String"), None())
-		       , VariableDecl(Id("name"))
-		       )]
-		    , FormalParam(
-		        []
-		      , ClassType(Id("Lattice"), None())
-		      , VariableDecl(Id("lat"))
-		      )
-		    )
-		  , []
-		  , None()
-		  )
-		, Block(
-		    [ ExpressionStatement(
-		        InvokeQExp(
-		          ExpressionName(Id("properties"))
-		        , None()
-		        , Id("put")
-		        , [ ExpressionName(Id("name"))
-		          , NewInstance(
-		              None()
-		            , []
-		            , Id("Property")
-		            , []
-		            , None()
-		            , [ExpressionName(Id("name")), ExpressionName(Id("lat"))]
-		            )
-		          ]
-		        )
-		      )
-		    ]
-		  )
-		),
-		MethodDecl(
-		  [Public()]
-		, MethodHeader(
-		    ClassType(Id("Property"), None())
-		  , Id("getProperty")
-		  , SingleParam(
-		      FormalParam(
-		        []
-		      , ClassType(Id("String"), None())
-		      , VariableDecl(Id("name"))
-		      )
-		    )
-		  , []
-		  , None()
-		  )
-		, Block(
-		    [ Return(
-		        InvokeQExp(
-		          ExpressionName(Id("properties"))
-		        , None()
-		        , Id("get")
-		        , [ExpressionName(Id("name"))]
-		        )
-		      )
-		    ]
-		  )
-		)
-      , MethodDecl(
-          [Public()]
-        , MethodHeader(
-            ClassType(Id("IStrategoTerm"), None())
-          , Id("getTerm")
-          , NoParams()
-          , []
-          , None()
-          )
-        , Block([Return(Field(This(), Id("term")))])
-        )
-      , MethodDecl(
-          [Public()]
-        , MethodHeader(
-            <node-set-type>
-          , Id("getChildren")
-          , NoParams()
-          , []
-          , None()
-          )
-        , Block([Return(Field(This(), Id("children")))])
-        )
-      , MethodDecl(
-          [Public()]
-        , MethodHeader(
-            <node-set-type>
-          , Id("getParents")
-          , NoParams()
-          , []
-          , None()
-          )
-        , Block([Return(Field(This(), Id("parents")))])
-        )
-      , MethodDecl(
-          [Public()]
-        , MethodHeader(
-            Void()
-          , Id("addChild")
-          , SingleParam(
-              FormalParam(
-                []
-              , <node-type>
-              , VariableDecl(Id("child"))
-              )
-            )
-          , []
-          , None()
-          )
-        , Block(
-            [ ExpressionStatement(
-                InvokeQExp(
-                  ExpressionName(AmbiguousName(Id("child")), Id("parents"))
-                , None()
-                , Id("add")
-                , [This()]
-                )
-              )
-            , ExpressionStatement(
-                InvokeQExp(
-                  ExpressionName(Id("children"))
-                , None()
-                , Id("add")
-                , [ExpressionName(Id("child"))]
-                )
-              )
-            ]
-          )
-        )
-      , MethodDecl(
-          [Public()]
-        , MethodHeader(
-            Void()
-          , Id("addChild")
-          , SingleParam(
-              FormalParam(
-                []
-              , <node-type;to-iterable-type>
-              , VariableDecl(Id("children"))
-              )
-            )
-          , []
-          , None()
-          )
-        , Block(
-            [ ForEach(
-                []
-              , <node-type>
-              , VariableDecl(Id("child"))
-              , ExpressionName(Id("children"))
-              , Block(
-                  [ExpressionStatement(
-                     Invoke(MethodName(Id("addChild")), [ExpressionName(Id("child"))])
-                   )]
-                )
-              )
-            ]
-          )
-        )
-      , MethodDecl(
-          [Public()]
-        , MethodHeader(
-            <node-set-type>
-          , Id("flatten")
-          , NoParams()
-          , []
-          , None()
-          )
-        , Block(
-            [ Return(
-                Invoke(
-                  MethodName(Id("flatten"))
-                , [NewInstance(
-                     None()
-                   , []
-                   , Id("HashSet")
-                   , []
-                   , Some(Diamond())
-                   , []
-                   )]
-                )
-              )
-            ]
-          )
-        )
-      , MethodDecl(
-          [Private()]
-        , MethodHeader(
-            <node-set-type>
-          , Id("flatten")
-          , SingleParam(
-              FormalParam(
-                []
-              , <node-set-type>
-              , VariableDecl(Id("visited"))
-              )
-            )
-          , []
-          , None()
-          )
-        , Block(
-            [ If(
-                InvokeQExp(
-                  ExpressionName(Id("visited"))
-                , None()
-                , Id("contains")
-                , [This()]
-                )
-              , Block(
-                  [ Return(
-                      NewInstance(
-                        None()
-                      , []
-                      , Id("HashSet")
-                      , []
-                      , Some(Diamond())
-                      , []
-                      )
-                    )
-                  ]
-                )
-              )
-            , ExpressionStatement(
-                InvokeQExp(
-                  ExpressionName(Id("visited"))
-                , None()
-                , Id("add")
-                , [This()]
-                )
-              )
-            , LocVarDeclStm(
-                LocalVarDecl(
-                  []
-                , <node-set-type>
-                , [ VariableDeclInit(
-                      VariableDecl(Id("nodes"))
-                    , NewInstance(
-                        None()
-                      , []
-                      , Id("HashSet")
-                      , []
-                      , Some(Diamond())
-                      , []
-                      )
-                    )
-                  ]
-                )
-              )
-            , ExpressionStatement(
-                InvokeQExp(
-                  ExpressionName(Id("nodes"))
-                , None()
-                , Id("add")
-                , [This()]
-                )
-              )
-            , ForEach(
-                []
-              , <node-type>
-              , VariableDecl(Id("child"))
-              , ExpressionName(Id("children"))
-              , Block(
-                  [ ExpressionStatement(
-                      InvokeQExp(
-                        ExpressionName(Id("nodes"))
-                      , None()
-                      , Id("addAll")
-                      , [ InvokeQExp(
-                            ExpressionName(Id("child"))
-                          , None()
-                          , Id("flatten")
-                          , [ExpressionName(Id("visited"))]
-                          )
-                        ]
-                      )
-                    )
-                  ]
-                )
-              )
-            , Return(ExpressionName(Id("nodes")))
-            ]
-          )
-        )
-      , MethodDecl(
-          [Public()]
-        , MethodHeader(
-            <node-set-type>
-          , Id("getLeaves")
-          , NoParams()
-          , []
-          , None()
-          )
-        , Block(
-            [ Return(
-                Invoke(
-                  MethodName(Id("getLeaves"))
-                , [NewInstance(
-                     None()
-                   , []
-                   , Id("HashSet")
-                   , []
-                   , Some(Diamond())
-                   , []
-                   )]
-                )
-              )
-            ]
-          )
-        )
-      , MethodDecl(
-          [Private()]
-        , MethodHeader(
-            <node-set-type>
-          , Id("getLeaves")
-          , SingleParam(
-              FormalParam(
-                []
-              , <node-set-type>
-              , VariableDecl(Id("visited"))
-              )
-            )
-          , []
-          , None()
-          )
-        , Block(
-            [ LocVarDeclStm(
-                LocalVarDecl(
-                  []
-                , <node-set-type>
-                , [ VariableDeclInit(
-                      VariableDecl(Id("leaves"))
-                    , NewInstance(
-                        None()
-                      , []
-                      , Id("HashSet")
-                      , []
-                      , Some(Diamond())
-                      , []
-                      )
-                    )
-                  ]
-                )
-              )
-            , ExpressionStatement(
-                InvokeQExp(
-                  ExpressionName(Id("visited"))
-                , None()
-                , Id("add")
-                , [This()]
-                )
-              )
-            , LocVarDeclStm(
-                LocalVarDecl(
-                  []
-                , <node-set-type>
-                , [ VariableDeclInit(
-                      VariableDecl(Id("filteredChildren"))
-                    , InvokeQExp(
-                        InvokeQExp(
-                          InvokeQExp(ExpressionName(Id("children")), None(), Id("stream"), [])
-                        , None()
-                        , Id("filter")
-                        , [ LambdaExpression(
-                              SingleParam(Id("x"))
-                            , Not(
-                                InvokeQExp(
-                                  ExpressionName(Id("visited"))
-                                , None()
-                                , Id("contains")
-                                , [ExpressionName(Id("x"))]
-                                )
-                              )
-                            )
-                          ]
-                        )
-                      , None()
-                      , Id("collect")
-                      , [InvokeQExp(ExpressionName(Id("Collectors")), None(), Id("toSet"), [])]
-                      )
-                    )
-                  ]
-                )
-              )
-            , IfElse(
-                InvokeQExp(ExpressionName(Id("filteredChildren")), None(), Id("isEmpty"), [])
-              , Block(
-                  [ ExpressionStatement(
-                      InvokeQExp(
-                        ExpressionName(Id("leaves"))
-                      , None()
-                      , Id("add")
-                      , [This()]
-                      )
-                    )
-                  ]
-                )
-              , Block(
-                  [ ForEach(
-                      []
-                    , <node-type>
-                    , VariableDecl(Id("child"))
-                    , ExpressionName(Id("filteredChildren"))
-                    , Block(
-                        [ ExpressionStatement(
-                            InvokeQExp(
-                              ExpressionName(Id("leaves"))
-                            , None()
-                            , Id("addAll")
-                            , [ InvokeQExp(
-                                  ExpressionName(Id("child"))
-                                , None()
-                                , Id("getLeaves")
-                                , [ExpressionName(Id("visited"))]
-                                )
-                              ]
-                            )
-                          )
-                        ]
-                      )
-                    )
-                  ]
-                )
-              )
-            , Return(ExpressionName(Id("leaves")))
-            ]
-          )
-        )
-      ]
-  
-  create-constructor: r -> [ConstrDecl(
-          [Public()]
-        , None()
-        , Id("CfgNode")
-        , SingleParam(
-            FormalParam(
-              []
-            , ClassType(Id("IStrategoTerm"), None())
-            , VariableDecl(Id("term"))
-            )
-          )
-        , None()
-        , None()
-        , [
-              ExpressionStatement(Assign(Field(This(), Id("term")), ExpressionName(Id("term")))),
-              ExpressionStatement(Assign(ExpressionName(Id("children")), NewInstance(None(), [], Id("HashSet"), [], Some(Diamond()), []))),
-              ExpressionStatement(Assign(ExpressionName(Id("parents")), NewInstance(None(), [], Id("HashSet"), [], Some(Diamond()), []))),
-              ExpressionStatement(Assign(ExpressionName(Id("properties")), NewInstance(None(), [], Id("HashMap"), [], Some(Diamond()), []))),
-              ExpressionStatement(Assign(ExpressionName(Id("properties")), NewInstance(None(), [], Id("HashMap"), [], Some(Diamond()), [])))
-            //<filter(?PropDef(_, _));map(propdef-to-setter)> r
-          ]
-        )]
+   
+  node-class: _ -> java:type-dec |[
+	  public class CfgNode {
+		public HashMap<String, Property> properties;
+		public Set<CfgNode> children;
+		public Set<CfgNode> parents;
+		public CfgNodeId id;
+		public IStrategoTerm term;
+		public long interval;
+			
+		public CfgNode(CfgNodeId id) {
+			children = new HashSet<>();
+			parents = new HashSet<>();
+			properties = new HashMap<>();
+			this.id = id;
+		}
+		
+		public CfgNode(CfgNodeId id, IStrategoTerm term) {
+			children = new HashSet<>();
+			parents = new HashSet<>();
+			properties = new HashMap<>();
+			this.id = id;
+			this.term = term;
+			this.interval = Long.MAX_VALUE;
+		}
+	
+		public void addProperty(String name, Lattice lat) {
+			properties.put(name, new Property(name, lat));
+		}
+	
+		public Property getProperty(String name) {
+			return properties.get(name);
+		}
+	
+		public Set<CfgNode> getChildren() {
+			return this.children;
+		}
+	
+		public Set<CfgNode> getParents() {
+			return this.parents;
+		}
+	
+		public void addChild(CfgNode child) {
+			child.parents.add(this);
+			children.add(child);
+		}
+	
+		public void addChild(Iterable<CfgNode> children) {
+			for (CfgNode child : children) {
+				addChild(child);
+			}
+		}
+	
+		public Set<CfgNode> flatten() {
+			return flatten(new HashSet<>());
+		}
+	
+		private Set<CfgNode> flatten(Set<CfgNode> visited) {
+			if (visited.contains(this)) {
+				return new HashSet<>();
+			}
+			visited.add(this);
+			Set<CfgNode> nodes = new HashSet<>();
+			nodes.add(this);
+			for (CfgNode child : children) {
+				nodes.addAll(child.flatten(visited));
+			}
+			return nodes;
+		}
+	
+		public Set<CfgNode> getLeaves() {
+			return getLeaves(new HashSet<>());
+		}
+	
+		private Set<CfgNode> getLeaves(Set<CfgNode> visited) {
+			Set<CfgNode> leaves = new HashSet<>();
+			visited.add(this);
+			Set<CfgNode> filteredChildren = children.stream().filter(v -> !visited.contains(v)).collect(Collectors.toSet());
+			if (filteredChildren.isEmpty()) {
+				leaves.add(this);
+			} else {
+				for (CfgNode child : filteredChildren) {
+					leaves.addAll(child.getLeaves(visited));
+				}
+			}
+			return leaves;
+		}
+		
+		@Override
+		public String toString() {
+			return ~to-string-a + this.term.toString(2) + ~to-string-b;
+		}
+	  }
+    ]|
+  where
+    to-string-a := <to-string-literal> "CfgNode("
+  ; to-string-b := <to-string-literal> ")"
   
   propdef-to-setter: PropDef(name, UserTypeParams(lattice, _)) -> ExpressionStatement(Assign(ExpressionName(Id(<to-property-name> name)), NewInstance(None(), [], Id("Property"), [], None(), [ StringLiteral(<to-string-literal> name), <get-lattice> lattice])))
   
@@ -536,35 +143,6 @@ rules
   pattern-to-init-setter: prop -> Field(<make-property-get(|"node")>, Id("init"))
 
   make-property-get(|node): name -> InvokeQExp(ExpressionName(Id(node)), None(), Id("getProperty"), [StringLiteral(<to-string-literal> name)])
-  
-  create-factory-if: SignatureOpDecl(name, SignatureArrowOp(args, _)) -> result
-  where
-    arity := <length;int-to-string> args;
-    type-id := Id(<concat-strings> [<node-type-name>, name, arity]);
-    result := If(
-                LazyAnd(
-                  InvokeQExp(
-                    ExpressionName(Id("name"))
-                  , None()
-                  , Id("equals")
-                  , [StringLiteral(<to-string-literal> name)]
-                  )
-                , Eq(ExpressionName(Id("arity")), Deci(arity))
-                )
-              , Block(
-                  [ Return(
-                      NewInstance(
-                        None()
-                      , []
-                      , type-id
-                      , []
-                      , None()
-                      , [ExpressionName(AmbiguousName(Id("node")), Id("term"))]
-                      )
-                    )
-                  ]
-                )
-              )
   
   get-prop-name = to-set-name; prepend-string(|"get_")
   

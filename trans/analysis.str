@@ -2,38 +2,9 @@ module analysis
 
 imports
 
-  statixruntime
-  statix/api
 
   pp
   injections/-
-
-rules // Analysis
-
-  // single-file analysis
-//  editor-analyze = stx-editor-analyze(id|"statics", "programOK")
-  
-  // multi-file analysis
-  editor-analyze = stx-editor-analyze(id|"statics", "projectOk", "fileOk")
-
-rules // Editor Services
-
-  editor-resolve = stx-editor-resolve
-
-  editor-hover = stx-editor-hover
-      
-  get-type: node -> <get-type-internal <+ get-type-failed> node
-  
-  get-type-failed: node -> msg
-    where
-      nodeString := <strip-annos; write-to-string> node
-    ; msg := <strcat> ("Unset type: ", nodeString)
-      
-  get-type-internal: node -> type'
-    where
-      a  := <stx-get-ast-analysis> node
-    ; ty := <stx-get-ast-type(|a)> node
-    ; type' := <strip-annos> ty
 
 rules // Debugging
 
@@ -41,11 +12,6 @@ rules // Debugging
   debug-show-aterm: (selected, _, _, path, project-path) -> (filename, result)
     with filename := <guarantee-extension(|"aterm")> path
        ; result   := selected
-
-  // Prints the pre-analyzed abstract syntax ATerm of a selection.
-//  debug-show-pre-analyzed: (selected, _, _, path, project-path) -> (filename, result)
-//    with filename := <guarantee-extension(|"pre-analyzed.aterm")> path
-//       ; result   := <pre-analyze> selected
 
   // Prints the analyzed annotated abstract syntax ATerm of a selection.
   debug-show-analyzed: (selected, _, _, path, project-path) -> (filename, result)
