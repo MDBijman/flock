@@ -57,6 +57,8 @@ rules
   	"org.spoofax.terms.StrategoList",
   	"flock.subject.common.CfgGraph",
   	"flock.subject.common.CfgNode",
+  	"flock.subject.common.Graph",
+  	"flock.subject.common.Graph.Node",
   	"flock.subject.common.CfgNodeId",
   	"flock.subject.common.Helpers",
   	"flock.subject.common.Lattice",

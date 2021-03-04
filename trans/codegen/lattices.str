@@ -2,7 +2,6 @@ module codegen/lattices
 
 imports
   codegen/util
-  codegen/universalset
   codegen/setutils
   codegen/expressions
   

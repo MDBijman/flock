@@ -3,7 +3,6 @@ module codegen/graph
 imports
   codegen/util
   codegen/instances
-  codegen/properties
   codegen/lattices
   codegen/nodes
   codegen/cfg-matcher
@@ -22,6 +21,9 @@ imports
   signatures/java/packages/-
 
 rules
+
+  property-type = !ClassType(Id("Property"), None())
+  to-property-name = append-string(|"Property")
  
   concat-sets = filter(?(PropDef(_, _)));concat-sets-internal
   concat-sets-internal: [] -> StringLiteral("\"\\\"];\\n\"")
@@ -32,342 +34,7 @@ rules
   graph-type = !ClassType(<graph-type-id>, None())
   
   graph-class(|r): _ -> [java:type-dec |[
-  	public class CfgGraph {
-		public Set<CfgNode> roots;
-		public HashMap<CfgNodeId, CfgNode> idToNode;
-		public HashMap<CfgNodeId, IStrategoTerm> idToTerm;
-		public HashMap<CfgNodeId, Long> idToInterval;
-		public Analysis analysis;
-
-		static private CfgNodeId nextId = new CfgNodeId(0);
-	
-		public CfgGraph(Set<CfgNode> roots, IStrategoTerm root) {
-			this.roots = roots;
-			this.idToNode = new HashMap<>();
-			this.idToTerm = new HashMap<>();
-			this.analysis = new Analysis();
-			
-			for (CfgNode n : this.flatten()) {
-				this.idToNode.put(n.id, n);
-			}
-	
-			this.removeGhostNodes();
-			computeIntervals();
-		}
-		
-		/*public void checkGraph() {
-			for (CfgNode n : this.flatten()) {
-				for (CfgNode p : n.parents) {
-					if (!p.children.contains(n)) {
-						Program.printDebug("broken, missing child");
-					}
-				}
-				for (CfgNode c : n.children) {
-					if (!c.parents.contains(n)) {
-						Program.printDebug("broken, missing parent");
-					}
-				}
-			} 
-		}*/
-		
-		private void computeIntervals() {
-			this.idToInterval = new HashMap<>();
-			
-			Long next_index = new Long(1);
-			Stack<CfgNode> S = new Stack<>();
-			Set<CfgNode> nodes = this.flatten();
-			
-			HashSet<CfgNodeId> onStack = new HashSet<>();
-			HashMap<CfgNodeId, Long> lowlink = new HashMap<>();
-			HashMap<CfgNodeId, Long> index = new HashMap<>();
-			
-			for (CfgNode n : nodes) n.interval = Long.MAX_VALUE;
-			for (CfgNode r : roots) {
-				if (index.get(r.id) == null) {
-					strongConnect(r, next_index, S, onStack, lowlink, index);
-				}
-			}
-			for (CfgNode n : nodes) {
-				if (index.get(n.id) == null) {
-					strongConnect(n, next_index, S, onStack, lowlink, index);
-				}
-			}
-			
-			for (CfgNode n : nodes) {
-				this.idToInterval.put(n.id, n.interval);
-			}
-		}
-		
-		private void strongConnect(CfgNode v, Long next_index, Stack<CfgNode> S, HashSet<CfgNodeId> onStack, HashMap<CfgNodeId, Long> lowlink, HashMap<CfgNodeId, Long> index) {
-			index.put(v.id, next_index);
-			lowlink.put(v.id, next_index);
-			next_index += 1;
-			S.push(v);
-			onStack.add(v.id);
-			
-			for (CfgNode c : v.children) {
-				if (index.get(c.id) == null) {
-					strongConnect(c, next_index, S, onStack, lowlink, index);
-					if (lowlink.get(c.id) < lowlink.get(v.id)) {
-						lowlink.put(v.id, lowlink.get(c.id));
-					}
-				} else {
-					if (onStack.contains(c.id)) {
-						if (index.get(c.id) < lowlink.get(v.id)) {
-							lowlink.put(v.id, index.get(c.id));
-						}
-					}
-				}
-			}
-			
-			if (lowlink.get(v.id) == index.get(v.id)) {
-				CfgNode w;
-				do {
-					w = S.pop();
-					onStack.remove(w.id);
-					w.interval = index.get(v.id);
-				} while (w != v);
-			}
-		}
-	
-		public void replaceNode(Context context, CfgNode current, IStrategoTerm replacement) {
-			Set<CfgNodeId> removedIds = getAllIds(current.term);
-			Set<CfgNode> dependents = Analysis.getTermDependencies(current);
-	
-			for (CfgNodeId n : removedIds) {
-				if (idToNode.get(n) != null)
-					dependents.add(idToNode.get(n));
-			}
-	
-			for (CfgNode n : this.flatten()) {
-				boolean changed = false;
-				for (CfgNode d : dependents) {
-					boolean isRemoved = Analysis.removeFact(context, n, d.id);
-					changed |= isRemoved;
-				}
-				if (changed) {
-					analysis.addToDirty(n);
-				}
-			}
-	
-			Pair<Set<CfgNode>, Set<CfgNode>> newCfgNodes = createCfg(replacement);
-			Set<CfgNode> newHeads = newCfgNodes.getLeft();
-			Set<CfgNode> newLeaves = newCfgNodes.getRight();
-			Set<CfgNode> oldParents = new HashSet<>();
-			Set<CfgNode> oldChildren = new HashSet<>();
-			Set<CfgNode> allCfgNodes = this.flatten();
-	
-			for (CfgNode n : allCfgNodes) {
-				if (removedIds.contains(n.id))
-					continue;
-	
-				if (n.parents.removeIf(c -> removedIds.contains(c.id))) {
-					oldChildren.add(n);
-				}
-				if (n.children.removeIf(c -> removedIds.contains(c.id))) {
-					oldParents.add(n);
-				}
-			}
-	
-			analysis.removeFromDirty(removedIds);
-			analysis.removeFromNew(removedIds);
-	
-			// Fix roots
-			boolean replacedRoot = this.roots.removeIf(root -> removedIds.contains(root.id));
-	
-			if (replacedRoot) {
-				if (newHeads.size() > 0) {
-					this.roots.addAll(newHeads);
-				} else {
-					for (CfgNode n : oldChildren) {
-						this.roots.add(n);
-					}
-				}
-			}
-	
-			// Fix new node to old child links
-			for (CfgNode oldChild : oldChildren) {
-				if (newLeaves.size() > 0) {
-					for (CfgNode newLeaf : newLeaves) {
-						newLeaf.addChild(oldChild);
-					}
-				} else {
-					for (CfgNode oldParent : oldParents) {
-						oldParent.addChild(oldChild);
-					}
-				}
-			}
-			// Fix parent to (new) child links
-			for (CfgNode oldParent : oldParents) {
-				if (newHeads.size() > 0) {
-					for (CfgNode newHead : newHeads) {
-						oldParent.addChild(newHead);
-					}
-				} else {
-					for (CfgNode oldChild : oldChildren) {
-						oldParent.addChild(oldChild);
-					}
-				}
-			}
-	
-			this.removeGhostNodes();
-			computeIntervals();
-	
-			for (CfgNode n : newHeads) {
-				analysis.addToNew(n);
-			}
-		}
-		
-		public void update(Context context, IStrategoTerm program) {
-			updateTermMap(program);
-	
-			// Update idToNode map
-			for (Set<CfgNode> a : analysis.getDirtySets()) {
-				for (CfgNode n : a)
-					idToNode.put(n.id, n);
-
-			}
-			for (Set<CfgNode> a : analysis.getNewSets()) {
-				for (CfgNode n : a)
-					idToNode.put(n.id, n);
-			}
-			for (Entry<CfgNodeId, CfgNode> entry : idToNode.entrySet()) {
-				entry.getValue().term = idToTerm.get(entry.getKey());
-			}
-			for (Entry<CfgNodeId, Long> entry : this.idToInterval.entrySet()) {
-				idToNode.get(entry.getKey()).interval = entry.getValue();
-			}
-		}
- 
-	 	private void updateTermMap(IStrategoTerm program) {
-			for (IStrategoTerm term : program.getSubterms()) {
-				updateTermMap(term);
-			}
-	
-			CfgNodeId id = getTermNodeId(program);
-	
-			if (id != null) {
-				this.idToTerm.put(id, program);
-			}
-		}
-	
-		private Set<CfgNodeId> getAllIds(IStrategoTerm program) {
-			HashSet<CfgNodeId> set = new HashSet<>();
-			getAllIds(set, program);
-			return set;
-		}
-	
-		private void getAllIds(Set<CfgNodeId> visited, IStrategoTerm program) {
-			for (IStrategoTerm term : program.getSubterms()) {
-				getAllIds(visited, term);
-			}
-
-			CfgNodeId id = getTermNodeId(program);
-	
-			if (id != null) {
-				visited.add(id);
-			}
-		}
-	
-		static public CfgNodeId nextNodeId() {
-			CfgNodeId id = nextId;
-			nextId = nextId.successor();
-			return id;
-		}
-	
-		public CfgNode getCfgNode(CfgNodeId id) {
-			return this.idToNode.get(id);
-		}
-	
-		public Set<CfgNode> getRoots() {
-			return this.roots;
-		}
-  		
-	 	public String toGraphviz() {
-			String result = ~digraph;
-			Set<CfgNode> allNodes = flatten();
-	
-			for (CfgNode node : allNodes) {
-			/* Debug properties:
-				Property h = node.properties.get("values");
-				String propString = h == null ? " " : (h.value == null ? "" : " " + h.value.toString() + " ");
-				result += node.hashCode() + "[label=\"" + node.id.getId() + " " + node.term
-						.toString().replace("\\", "\\\\").replace("\t", "\\t").replace("\b", "\\b").replace("\n", "\\n")
-						.replace("\r", "\\r").replace("\f", "\\f").replace("\'", "\\'").replace("\"", "\\\"") + " "
-						+ node.interval + " "
-						+ propString.replace("\\", "\\\\").replace("\t", "\\t").replace("\b", "\\b").replace("\n", "\\n")
-								.replace("\r", "\\r").replace("\f", "\\f").replace("\'", "\\'").replace("\"", "\\\"")
-						+ "\"];";
-			*/
-	
-				result += node.hashCode() + ~label-open + node.id.getId() + ~space + ~node-term-escaped
-						+ ~label-close;
-				for (CfgNode child : node.children) {
-					result += node.hashCode() + ~arrow + child.hashCode() + ~semicolon;
-				}
-			}
-			result += ~digraph-close;
-			return result;
-		} 
-
-		public Set<CfgNode> flatten() {
-			Set<CfgNode> nodes = new HashSet<>();
-			for (CfgNode root : roots) {
-				nodes.addAll(root.flatten());
-			}
-			return nodes;
-		}
-	
-		private static Set<CfgNode> getAllLeaves(Set<CfgNode> input) {
-			Set<CfgNode> result = new HashSet<>();
-			for (CfgNode node : input) {
-				result.addAll(node.getLeaves());
-			}
-			return result;
-		}
-	
-		public static CfgGraph createControlFlowGraph(IStrategoTerm ast) {
-			CfgGraph g = new CfgGraph(createCfgs(ast), ast);
-			g.removeGhostNodes();
-			return g;
-		}
-		
-		private void removeGhostNodes() {
-			for (CfgNode n : this.flatten()) {
-				if(n.id.getId() == Long.MAX_VALUE) {
-					for (CfgNode p : n.parents) {
-						p.children.remove(n);
-						p.addChild(n.children);
-					}
-	
-					for (CfgNode c : n.children) {
-						c.parents.remove(n);
-					}
-	
-					if (this.roots.contains(n)) {
-						this.roots.remove(n);
-						this.roots.addAll(n.children);
-					}
-				}
-			}
-		}
-	
-		private static boolean isEmptyPair(Pair<Set<CfgNode>, Set<CfgNode>> p) {
-			return p.getLeft().isEmpty() && p.getRight().isEmpty();
-		}
-	
-		private static Pair<Set<CfgNode>, Set<CfgNode>> patchIfEmpty(Pair<Set<CfgNode>, Set<CfgNode>> p) {
-			if (isEmptyPair(p)) {
-				Set<CfgNode> tail = new HashSet<>();
-				Set<CfgNode> head = new HashSet<>();
-				CfgNode ghostNode = new CfgNode(new CfgNodeId(Long.MAX_VALUE));
-				tail.add(ghostNode);
-				head.add(ghostNode);
-				return Pair.of(tail, head);
-			} else {
-				return p;
-			}
-		}	
+  	public class GraphFactory {
 
 		~create-cfgs-method
 		~create-cfg-method
@@ -375,24 +42,14 @@ rules
 		public static CfgNodeId getTermNodeId(IStrategoTerm n) {
 			if (n.getAnnotations().size() == 0)
 				return null;
-			assert TermUtils.isAppl(n.getAnnotations().getSubterm(0), ~nodeid-term-name, 1);
+			assert TermUtils.isAppl(n.getAnnotations().getSubterm(0), "FlockNodeId", 1);
 			IStrategoInt id = (IStrategoInt) n.getAnnotations().getSubterm(0).getSubterm(0);
 			return new CfgNodeId(id.intValue());
 		}
   	}
   ]|]
   where
-  // String literals in the toGraphviz method
-    digraph     := <to-string-literal> "digraph G {\\n"
-  ; label-open  := <to-string-literal> "[label=\\\""
-  ; label-close := <to-string-literal> "\\\"];"
-  ; space := <to-string-literal> " "
-  ; arrow := <to-string-literal> "->"
-  ; semicolon := <to-string-literal> ";\\n"
-  ; digraph-close := <to-string-literal> "}\\n"
-  ; nodeid-term-name := <to-string-literal> "FlockNodeId"
-  ; node-term-escaped := <escape-string-expr> |[ node.term.toString() ]|
-  ; create-cfg-method := <cfg-matcher-method> r
+    create-cfg-method := <cfg-matcher-method> r
   ; create-cfgs-method := <cfg-collector-method> r
   
   get-forward-updaters = get-forwards;map(name-to-updater);concat

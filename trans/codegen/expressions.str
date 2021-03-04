@@ -4,7 +4,6 @@ imports
   codegen/util
   codegen/setutils
   codegen/lattices
-  codegen/properties
   codegen/cfg-matcher
   codegen/user-functions
   codegen/helpers
@@ -28,7 +27,7 @@ rules
   transform-expr = transform-expr(|[])
   
   // Sets
-  transform-expr(|bindings): SetLiteral(l) -> <set-create> <map(transform-expr)> l
+  transform-expr(|bindings): SetLiteral(l) -> <set-create> <map(transform-expr)> l where <debug> bindings ; <debug> l
   transform-expr(|bindings): Contains(element, set) -> InvokeQExp(<transform-expr(|bindings)> set, None(), Id("contains"), [<transform-expr(|bindings)> element])
   transform-expr(|bindings): SetComp(expr, _, _, predicates) -> <set-comp-body(|bindings);statements-to-expression> (expr, predicates)
   transform-expr(|bindings): SetCompExprPredicate(x) -> <transform-expr(|bindings)> x
@@ -199,7 +198,7 @@ rules
   
   match-arm-to-if(|rootterm, bindings): MatchArm(pattern, expr) -> If(<cfg-pattern-to-condition(|rootterm, bindings)> pattern, Block(statements))
   where
-    pattern-vars := <cfg-pattern-to-then(|rootterm, bindings)> pattern;
+    pattern-vars := <pattern-to-decls(|rootterm, bindings)> pattern;
     newbindings := <concat;uniq> [bindings, <get-bindings> pattern];
     return := [Return(<transform-expr(|newbindings)> expr)];
     statements := <concat> [pattern-vars, return]

@@ -1,9 +1,7 @@
 module codegen/user-functions
 
 imports
-  codegen/properties
   codegen/util
-  codegen/nodes
   codegen/expressions
   
   signatures/flock/-
@@ -29,6 +27,15 @@ rules
   
   to-function-name = append-string(|"_f")
 
+  property-function: PropDef(name, _) -> java:method-dec |[
+    public static Object ~fun-name(Object o) {
+      Node node = (Node) o;
+      return node.getProperty(~prop-name).value;
+    }
+  ]|
+  where
+    fun-name := <to-function-name> name
+  ; prop-name := <to-string-literal> name
   user-functions-class(|r) = ![ClassDeclaration(
       []
     , <functions-type-id>
