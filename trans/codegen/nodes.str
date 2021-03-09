@@ -5,7 +5,6 @@ imports
   codegen/cfg-matcher
   codegen/transfer-functions
   codegen/expressions
-  codegen/properties
   codegen/lattices
   
   signatures/flock/-
@@ -22,111 +21,12 @@ imports
   signatures/java/packages/-
 
 rules
-  node-type-name = !"CfgNode"
+  node-type-name = !"Node"
   node-type-id = !Id(<node-type-name>)
   node-type = !ClassType(<node-type-id>, None())
   node-set-type = node-type;to-set-type
-   
-  node-class: _ -> java:type-dec |[
-	  public class CfgNode {
-		public HashMap<String, Property> properties;
-		public Set<CfgNode> children;
-		public Set<CfgNode> parents;
-		public CfgNodeId id;
-		public IStrategoTerm term;
-		public long interval;
-			
-		public CfgNode(CfgNodeId id) {
-			children = new HashSet<>();
-			parents = new HashSet<>();
-			properties = new HashMap<>();
-			this.id = id;
-		}
-		
-		public CfgNode(CfgNodeId id, IStrategoTerm term) {
-			children = new HashSet<>();
-			parents = new HashSet<>();
-			properties = new HashMap<>();
-			this.id = id;
-			this.term = term;
-			this.interval = Long.MAX_VALUE;
-		}
-	
-		public void addProperty(String name, Lattice lat) {
-			properties.put(name, new Property(name, lat));
-		}
-	
-		public Property getProperty(String name) {
-			return properties.get(name);
-		}
-	
-		public Set<CfgNode> getChildren() {
-			return this.children;
-		}
-	
-		public Set<CfgNode> getParents() {
-			return this.parents;
-		}
-	
-		public void addChild(CfgNode child) {
-			child.parents.add(this);
-			children.add(child);
-		}
-	
-		public void addChild(Iterable<CfgNode> children) {
-			for (CfgNode child : children) {
-				addChild(child);
-			}
-		}
-	
-		public Set<CfgNode> flatten() {
-			return flatten(new HashSet<>());
-		}
-	
-		private Set<CfgNode> flatten(Set<CfgNode> visited) {
-			if (visited.contains(this)) {
-				return new HashSet<>();
-			}
-			visited.add(this);
-			Set<CfgNode> nodes = new HashSet<>();
-			nodes.add(this);
-			for (CfgNode child : children) {
-				nodes.addAll(child.flatten(visited));
-			}
-			return nodes;
-		}
-	
-		public Set<CfgNode> getLeaves() {
-			return getLeaves(new HashSet<>());
-		}
-	
-		private Set<CfgNode> getLeaves(Set<CfgNode> visited) {
-			Set<CfgNode> leaves = new HashSet<>();
-			visited.add(this);
-			Set<CfgNode> filteredChildren = children.stream().filter(v -> !visited.contains(v)).collect(Collectors.toSet());
-			if (filteredChildren.isEmpty()) {
-				leaves.add(this);
-			} else {
-				for (CfgNode child : filteredChildren) {
-					leaves.addAll(child.getLeaves(visited));
-				}
-			}
-			return leaves;
-		}
-		
-		@Override
-		public String toString() {
-			return ~to-string-a + this.term.toString(2) + ~to-string-b;
-		}
-	  }
-    ]|
-  where
-    to-string-a := <to-string-literal> "CfgNode("
-  ; to-string-b := <to-string-literal> ")"
-  
-  propdef-to-setter: PropDef(name, UserTypeParams(lattice, _)) -> ExpressionStatement(Assign(ExpressionName(Id(<to-property-name> name)), NewInstance(None(), [], Id("Property"), [], None(), [ StringLiteral(<to-string-literal> name), <get-lattice> lattice])))
-  
-  node-factory-switch: r -> Block(<get-sorted-proprules;number(node-factory-switch-entry)>)
+
+  node-factory-switch: r -> Block(<get-sorted-proprules; number(node-factory-switch-entry)>)
   get-sorted-proprules = filter(?PropRule(_, _, _, _));reverse
   
   node-factory-switch-entry: (PropRule(prop, pat, _, _), index) -> If(<cfg-pattern-to-condition(|"node.term", [])> pat, Block([setter]))
@@ -144,7 +44,3 @@ rules
 
   make-property-get(|node): name -> InvokeQExp(ExpressionName(Id(node)), None(), Id("getProperty"), [StringLiteral(<to-string-literal> name)])
   
-  get-prop-name = to-set-name; prepend-string(|"get_")
-  
-  create-analysis-fields: r -> <filter(?(PropDef(_, _)));map(create-analysis-field)> r
-  create-analysis-field: PropDef(name, UserTypeParams(_, _)) -> FieldDecl([Protected()], <property-type>, [VariableDecl(Id(<to-property-name> name))])

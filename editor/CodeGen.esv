@@ -4,16 +4,7 @@ menus
   menu: "CodeGen" (source) (openeditor)
     action: "Show Java AST" = debug-show-java-ast
     action: "Show Java code" = debug-show-java
-    action: "Show CfgNode Java code" = debug-show-cfgnode-java
-    action: "Show CfgNodeId Java code" = debug-show-cfgnodeid-java
     action: "Show CfgGraph Java code" = debug-show-cfggraph-java
-    action: "Show SetUtils Java code" = debug-show-setutils-java
-    action: "Show MapUtils Java code" = debug-show-maputils-java
-    action: "Show UniversalSet Java code" = debug-show-universalset-java
-    action: "Show Property Java code" = debug-show-property-java
-    action: "Show Lattice Java code" = debug-show-lattice-java
-    action: "Show Helper Java code" = debug-show-helper-java
-    action: "Show Transfer Java code" = debug-show-transfer-java
     action: "Show Analysis Java code" = debug-show-analysis-java
 
    

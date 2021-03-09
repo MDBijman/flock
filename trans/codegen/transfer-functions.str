@@ -29,18 +29,12 @@ rules
   transfer-classes(|r) = <filter(?PropRule(_, _, _, _));reverse;number(id);create-all-transfer-classes> r
   create-all-transfer-classes: r -> <concat> [<transfer-instances-class> r, <create-transfer-classes> r]
   
-  transfer-class = ![java:type-dec |[
-	public abstract class TransferFunction {
-		public abstract Object eval(CfgNode node);
-	}
-  ]|]
-  
   set-term-to-node-term = ![LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id("term")), ExpressionName(AmbiguousName(Id("node")), Id("term")))]))]
   create-transfer-classes = map(create-transfer-class)
   create-transfer-class: (PropRule(prop, pat, expr, wc), index) -> java:type-dec |[
 	class ~name extends TransferFunction {
 		@Override
-		public Object eval(CfgNode node) {
+		public Object eval(Node node) {
 			~bstm*:statements
 		}
 	}
@@ -52,11 +46,14 @@ rules
   ; return-statement := [Return(<transform-expr> expr)]
   ; statements := <concat> [<set-term-to-node-term>, pattern-vars, where-vars, return-statement]
   
-  pattern-to-vars: Backward(p, name) -> <concat> [<name-to-node> name, <cfg-pattern-to-then(|"term", [])> p]
-  pattern-to-vars: Forward(name, p) -> <concat> [<name-to-node> name, <cfg-pattern-to-then(|"term", [])> p]
-  pattern-to-vars: PropPatternStart(p) -> <cfg-pattern-to-then(|[], "term")> p
-  pattern-to-vars: PropPatternEnd(p) -> <cfg-pattern-to-then(|[], "term")> p
+  pattern-to-vars: Backward(p, name) -> <concat> [<name-to-node> name, <pattern-to-decls(|"term", [])> p]
+  pattern-to-vars: Forward(name, p) -> <concat> [<name-to-node> name, <pattern-to-decls(|"term", [])> p]
+  pattern-to-vars: PropPatternStart(p) -> <pattern-to-decls(|[], "term")> p
+  pattern-to-vars: PropPatternEnd(p) -> <pattern-to-decls(|[], "term")> p
   
+  node-type-name = !"Node"
+  node-type-id = !Id(<node-type-name>)
+  node-type = !ClassType(<node-type-id>, None())
   name-to-node: name -> [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-term-name> name)), ExpressionName(Id("node")))]))]
   
   where-to-code: NoWhereClause() -> []

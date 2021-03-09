@@ -4,7 +4,6 @@ imports
   codegen/util
   codegen/setutils
   codegen/lattices
-  codegen/properties
   codegen/cfg-matcher
   codegen/user-functions
   codegen/helpers
@@ -29,6 +28,7 @@ rules
   
   // Sets
   transform-expr(|bindings): SetLiteral(l) -> <set-create> <map(transform-expr)> l
+  transform-expr(|bindings): TypedSetLiteral(l, t) -> <set-create> <map(transform-expr)> l
   transform-expr(|bindings): Contains(element, set) -> InvokeQExp(<transform-expr(|bindings)> set, None(), Id("contains"), [<transform-expr(|bindings)> element])
   transform-expr(|bindings): SetComp(expr, _, _, predicates) -> <set-comp-body(|bindings);statements-to-expression> (expr, predicates)
   transform-expr(|bindings): SetCompExprPredicate(x) -> <transform-expr(|bindings)> x
@@ -69,7 +69,14 @@ rules
   
   // Non-sets
   transform-expr(|bindings): ExprExprRef(x) -> <transform-expr(|bindings)> x
-  transform-expr(|bindings): Ref(name) -> ExpressionName(Id(<to-term-name> name))
+  transform-expr(|bindings): Ref(name) -> java:expr |[ x ]| where x := <to-term-name> name
+  transform-expr(|bindings): TypedRef(name, UserTypeParams(type, _)) -> java:expr |[ new ~t(x, node.getId()) ]|
+  where
+    t := <concat-strings> [type, "Value"]
+  ; x := <to-term-name> name
+  transform-expr(|bindings): TypedRef(name, Name()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
+  where
+    x := <to-term-name> name
   transform-expr(|bindings): NEq(l, r) -> Not(InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r]))
   transform-expr(|bindings): Eq(l, r) -> InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r])
   transform-expr(|bindings): Not(x) -> Not(<transform-expr(|bindings);cast-to-bool> x)
@@ -100,12 +107,16 @@ rules
 											  )
 											
   
-  transform-expr(|bindings): x@Match(expr, arms) -> <concat;statements-to-expression> [
-      [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id(rootterm)), <transform-expr(|bindings);cast-to-term> expr)]))],
+  transform-expr(|bindings): x@Match(expr, arms) -> <concat; statements-to-expression> [
+      [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id(rootterm)), <transform-expr(|bindings); cast-to-term> expr)]))],
       <map(match-arm-to-if(|rootterm, bindings))> arms,
       [Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not match term '\""), ExpressionName(Id(rootterm))), StringLiteral("\"'.\""))]))]
     ] where rootterm := <newname> "term"
   
+  transform-expr(|bindings): TypedExprTerm(constructor, args, UserTypeParams(type, _)) -> java:expr |[ new ~t(e, node.getId()) ]|
+  where
+    e := <transform-expr(|bindings)> ExprTerm(constructor, args)
+  ; t := <concat-strings> [type, "Value"]
   transform-expr(|bindings): ExprTerm(constructor, args) -> NewInstance(
     None()
   , []
@@ -199,7 +210,7 @@ rules
   
   match-arm-to-if(|rootterm, bindings): MatchArm(pattern, expr) -> If(<cfg-pattern-to-condition(|rootterm, bindings)> pattern, Block(statements))
   where
-    pattern-vars := <cfg-pattern-to-then(|rootterm, bindings)> pattern;
+    pattern-vars := <pattern-to-decls(|rootterm, bindings)> pattern;
     newbindings := <concat;uniq> [bindings, <get-bindings> pattern];
     return := [Return(<transform-expr(|newbindings)> expr)];
     statements := <concat> [pattern-vars, return]

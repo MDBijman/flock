@@ -2,7 +2,6 @@ module codegen/setutils
 
 imports
   codegen/util
-  codegen/universalset
 
   signatures/java/types/-
   signatures/java/classes/-
