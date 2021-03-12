@@ -1,13 +1,13 @@
 module flock/desugar/Property
 
 imports
-
-flock/Property
-
-flock/Common
-flock/Type
+	
+	flock/Property
+	
+	flock/Common
+	flock/Type
 
 context-free syntax
-
-PropDef.PropDef-DS = [prop [PropName]: [Type]]
-PropDef.ExtPropDef = [external prop [PropName]: [Type]]
+	
+	PropDef.PropDef-DS = [prop [PropName]: [Type]]
+	PropDef.ExtPropDef = [external prop [PropName]: [Type]]

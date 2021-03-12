@@ -9,6 +9,10 @@ strategies
 
   analysis-name: (a, _) -> a
   analysis-is-forward: (_, a) -> a
+
+  analysis-is-forward: "values" -> |[true]|
+  analysis-is-forward: "live" -> |[false]|
+  analysis-is-forward: "alias" -> |[true]|
   
   analysis-boundary-check(|n): e -> java:bstm |[ if (e < intervalBoundary) continue; ]| where <equal(|n)> "examples/LiveVariables"
   analysis-boundary-check(|n): e -> java:bstm |[ if (e > intervalBoundary) continue; ]| where <equal(|n)> "examples/ValueAnalysis"

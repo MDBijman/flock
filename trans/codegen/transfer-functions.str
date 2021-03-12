@@ -6,6 +6,7 @@ imports
   codegen/lattices
   codegen/expressions
   codegen/cfg-matcher
+  codegen/types
   
   signatures/flock/-
   signatures/flock/desugar/-
@@ -34,7 +35,7 @@ rules
   create-transfer-class: (PropRule(prop, pat, expr, wc), index) -> java:type-dec |[
 	class ~name extends TransferFunction {
 		@Override
-		public Object eval(Node node) {
+		public Lattice eval(Node node) {
 			~bstm*:statements
 		}
 	}
@@ -43,8 +44,13 @@ rules
     name := <get-transfer-id> index
   ; pattern-vars := <pattern-to-vars> pat
   ; where-vars := <where-to-code> wc
-  ; return-statement := [Return(<transform-expr> expr)]
-  ; statements := <concat> [<set-term-to-node-term>, pattern-vars, where-vars, return-statement]
+  ; statements := <concat> [
+  	  <set-term-to-node-term>,
+  	  pattern-vars,
+  	  where-vars,
+  	  <expr-to-stmts> expr,
+  	  [Return(<transform-expr> expr)]
+  	]
   
   pattern-to-vars: Backward(p, name) -> <concat> [<name-to-node> name, <pattern-to-decls(|"term", [])> p]
   pattern-to-vars: Forward(name, p) -> <concat> [<name-to-node> name, <pattern-to-decls(|"term", [])> p]
@@ -57,8 +63,27 @@ rules
   name-to-node: name -> [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-term-name> name)), ExpressionName(Id("node")))]))]
   
   where-to-code: NoWhereClause() -> []
-  where-to-code: WhereClause(bindings) -> <map(binding-to-code)> bindings
-  binding-to-code: Binding(var, expr) -> LocVarDeclStm(LocalVarDecl([], ClassType(Id("Object"), None()), [ VariableDeclInit(VariableDecl(Id(<to-term-name> var)), <transform-expr> expr)]))
+  where-to-code: WhereClause(bindings) -> <map(binding-to-code); concat> bindings
+  binding-to-code: Binding(var, expr) -> <fail> with <debug> "Bindings must be typed"
+
+  binding-to-code: t@TypedBinding(var, type, expr) -> [
+      stmt*,
+      java:bstm |[ ~java-type ~name = ~result-expr; ]|
+    ]
+    where 
+      <requires-statements> expr
+    with
+      (result-name, stmt*) := <expr-to-stmts> expr
+    ; java-type := <type-to-java> type
+    ; name := <to-term-name> var
+    ; result-expr := <construct-from(|type)> result-name
+
+    
+  binding-to-code: TypedBinding(var, type, expr) -> [java:bstm |[ ~java-type ~name = ~java-expr; ]|]
+    with
+      java-type := <type-to-java> type
+    ; name := <to-term-name> var
+    ; java-expr := <transform-expr; simple-cast(|type)> expr
   
   transfer-instances-class: r -> [ClassDeclaration(
       []

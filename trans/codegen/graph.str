@@ -56,9 +56,9 @@ rules
   get-backward-updaters = get-backwards;map(name-to-updater);concat
   
   name-to-updater: name -> java:bstm* |[
-  	Object ~old-name = successor.getProperty(~prop-name).value;
-	if (node.getProperty(~prop-name).lattice.nleq(~new-name, ~old-name)) {
-		successor.getProperty(~prop-name).value = node.getProperty(~prop-name).lattice.lub(~old-name, ~new-name);
+  	Lattice ~old-name = successor.getProperty(~prop-name).lattice;
+	if (~new-name.nleq(~old-name)) {
+		successor.getProperty(~prop-name).lattice = ~old-name.lub(~new-name);
 		changed = true;
 	}	  
   ]|

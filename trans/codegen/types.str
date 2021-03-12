@@ -1,0 +1,44 @@
+module codegen/types
+
+imports
+
+  codegen/expressions
+
+  signatures/flock/-
+  signatures/flock/desugar/-
+
+  signatures/java/classes/-
+  signatures/java/lexical/-
+
+strategies
+
+  simple-cast(|type): expr -> <simple-cast> (type, expr)
+  simple-cast: (UserTypeParams(t, _), expr) -> java |[ (~t) ~expr ]|
+  simple-cast: (Map(_, _), expr) -> java |[ (MapLattice) ~expr ]|
+  simple-cast: (typename, expr) -> java |[ (~typename) ~expr ]|
+  
+  value-cast(|type): expr -> <value-cast> (type, expr)
+  value-cast: (Map(_, _), expr) -> java |[ (MapLattice) ~expr ]|
+  value-cast: (typename, expr) -> java |[ (IStrategoTerm) ~expr.value() ]|
+
+  value-type: Map(_, _) -> java:type |[ MapLattice ]|
+  value-type: typename -> java:type |[ IStrategoTerm ]|
+
+  construct-from(|type): expr -> <construct-from> (type, expr)
+  construct-from: (UserTypeParams(name, _), expr) -> java:expr |[ new ~name(~expr) ]|
+  construct-from: (Map(_, _), expr) -> java |[ new MapLattice(~expr) ]|
+  construct-from: (name, expr) -> java:expr |[ new ~name(~expr) ]|
+  
+  type-to-java: UserTypeParams(name, _) -> ClassType(Id(name), None())
+  type-to-java: Map(_, _) -> ClassType(Id("MapLattice"), None())
+  
+  type-to-superclass: UserTypeParams(name, _) -> "Lattice"
+  type-to-superclass: Map(_, _) -> "MapLattice"
+  
+  type-extends-lattice: Map(_, _) -> <id>
+  type-extends-lattice: UserTypeParams(name, _) -> <fail>
+  
+  is-map: "MapLattice" -> <id>
+  
+  requires-statements = ?MapComp(_, _, _, _) + ?SetComp(_, _, _, _) + ?Match(_, _)
+  

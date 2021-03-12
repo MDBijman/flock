@@ -6,6 +6,7 @@ imports
   codegen/lattices
   codegen/cfg-matcher
   codegen/user-functions
+  codegen/types
   codegen/helpers
 
   signatures/flock/-
@@ -23,6 +24,11 @@ imports
   signatures/java/packages/-
 
 rules
+  expr-to-stmts: MapComp(m@MapBinding(a, b), _, _, predicates) -> <map-comp-body(|[])> (m, predicates)
+  expr-to-stmts: SetComp(expr, _, _, predicates) -> <set-comp-body(|[])> (expr, predicates)
+  expr-to-stmts: m@Match(_, _) -> <match-to-stmts> m
+  expr-to-stmts: _ -> []
+
   // Overload - be careful, this can cause issues when bindings aren't passed correctly.
   transform-expr = transform-expr(|[])
   
@@ -30,7 +36,7 @@ rules
   transform-expr(|bindings): SetLiteral(l) -> <set-create> <map(transform-expr)> l
   transform-expr(|bindings): TypedSetLiteral(l, t) -> <set-create> <map(transform-expr)> l
   transform-expr(|bindings): Contains(element, set) -> InvokeQExp(<transform-expr(|bindings)> set, None(), Id("contains"), [<transform-expr(|bindings)> element])
-  transform-expr(|bindings): SetComp(expr, _, _, predicates) -> <set-comp-body(|bindings);statements-to-expression> (expr, predicates)
+  transform-expr(|bindings): SetComp(expr, _, _, predicates) -> <fail> with <debug> "Set comprehension must not be nested expression"
   transform-expr(|bindings): SetCompExprPredicate(x) -> <transform-expr(|bindings)> x
   transform-expr(|bindings): Union(a, b) -> <set-union> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
   transform-expr(|bindings): Difference(a, b) -> <set-difference> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
@@ -38,7 +44,7 @@ rules
   
   // Maps
   transform-expr(|bindings): MapLiteral(l) -> <map-create> <map(transform-binding(|bindings)); flatten-list> l
-  transform-expr(|bindings): MapComp(m@MapBinding(a, b), _, _, predicates) -> <map-comp-body(|bindings); statements-to-expression> (m, predicates)
+  transform-expr(|bindings): MapComp(_, _, _, _) -> <fail> with <debug> "Mapcomp must not be nested expression"
   transform-expr(|bindings): MapCompExprPredicate(x) -> <transform-expr(|bindings)> x
   transform-binding(|bindings): MapBinding(k, v) -> [<transform-expr(|bindings)> k, <transform-expr(|bindings)> v]
   
@@ -68,55 +74,46 @@ rules
   transform-expr(|bindings): FalseLiteral() -> False()
   
   // Non-sets
+  transform-expr(|bindings): WithOrigin(expr, vars) -> <transform-expr(|bindings); add-origins(|vars)> expr
+  transform-expr(|bindings): Cast(expr, type) -> <transform-expr(|bindings); construct-from(|type)> expr
   transform-expr(|bindings): ExprExprRef(x) -> <transform-expr(|bindings)> x
   transform-expr(|bindings): Ref(name) -> java:expr |[ x ]| where x := <to-term-name> name
-  transform-expr(|bindings): TypedRef(name, UserTypeParams(type, _)) -> java:expr |[ new ~t(x, node.getId()) ]|
+  transform-expr(|bindings): TypedRef(name, UserTypeParams(type, _)) -> java:expr |[ new ~type(x) ]|
   where
-    t := <concat-strings> [type, "Value"]
-  ; x := <to-term-name> name
+    x := <to-term-name> name
   transform-expr(|bindings): TypedRef(name, Name()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
   where
     x := <to-term-name> name
-  transform-expr(|bindings): NEq(l, r) -> Not(InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r]))
-  transform-expr(|bindings): Eq(l, r) -> InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r])
-  transform-expr(|bindings): Not(x) -> Not(<transform-expr(|bindings);cast-to-bool> x)
-  transform-expr(|bindings): Occurrence(namespace, name) -> Null() // FIXME
+  transform-expr(|bindings): Match(expr, arms) -><fail> with <debug> "Match must not be nested expression"
+   
+  transform-expr(|bindings): NEq(l, r)    -> Not(InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r]))
+  transform-expr(|bindings): Eq(l, r)     -> InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r])
+  transform-expr(|bindings): Not(x)       -> Not(<transform-expr(|bindings);cast-to-bool> x)
   transform-expr(|bindings): Predicate(x) -> <transform-expr(|bindings)> x
-  transform-expr(|bindings): If(i, t, e) -> Cond(<transform-expr(|bindings);cast-to-bool> i, <transform-expr(|bindings)> t, <transform-expr(|bindings)> e)
-  transform-expr(|bindings): And(l, r) -> LazyAnd(<transform-expr(|bindings);cast-to-bool> l, <transform-expr(|bindings);cast-to-bool> r)
-  transform-expr(|bindings): Or(l, r) -> LazyOr(<transform-expr(|bindings);cast-to-bool> l, <transform-expr(|bindings);cast-to-bool> r)
-  transform-expr(|bindings): Add(l, r) -> <add-or-concat> (<transform-expr(|bindings)> l, <transform-expr(|bindings)> r)
-  transform-expr(|bindings): Sub(l, r) -> Sub(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Mul(l, r) -> Mul(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Div(l, r) -> Div(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Mod(l, r) -> Mod(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Neg(x) -> Minus(<transform-expr(|bindings);cast-to-int> x)
-  transform-expr(|bindings): Lt(l, r) -> Lt(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Lte(l, r) -> LtEq(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Gt(l, r) -> Gt(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Gte(l, r) -> GtEq(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): If(i, t, e)  -> Cond(<transform-expr(|bindings);cast-to-bool> i, <transform-expr(|bindings)> t, <transform-expr(|bindings)> e)
+  transform-expr(|bindings): And(l, r)    -> LazyAnd(<transform-expr(|bindings);cast-to-bool> l, <transform-expr(|bindings);cast-to-bool> r)
+  transform-expr(|bindings): Or(l, r)     -> LazyOr(<transform-expr(|bindings);cast-to-bool> l, <transform-expr(|bindings);cast-to-bool> r)
+  transform-expr(|bindings): Add(l, r)    -> <add-or-concat> (<transform-expr(|bindings)> l, <transform-expr(|bindings)> r)
+  transform-expr(|bindings): Sub(l, r)    -> Sub(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Mul(l, r)    -> Mul(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Div(l, r)    -> Div(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Mod(l, r)    -> Mod(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Neg(x)       -> Minus(<transform-expr(|bindings);cast-to-int> x)
+  transform-expr(|bindings): Lt(l, r)     -> Lt(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Lte(l, r)    -> LtEq(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Gt(l, r)     -> Gt(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): Gte(l, r)    -> GtEq(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
   transform-expr(|bindings): ExprTuple(l, r) -> NewInstance(None(), [], Id("StrategoTuple"), [], None(), [ NewArrayInit(ClassType([], Id("IStrategoTerm"), None()), [AnnotateDim([])], ArrayInit(<concat> [[<transform-expr(|bindings);cast-to-term> l], <map(transform-expr(|bindings);cast-to-term)> r])), Null()])
-  transform-expr(|bindings): TermIndex(r) -> Field(
-											    InvokeQExp(
-											      ExpressionName(Id(<to-term-name> r))
-											    , None()
-											    , Id("getProperty")
-											    , [StringLiteral("\"position\"")]
-											    )
-											  , Id("value")
-											  )
-											
+  transform-expr(|bindings): Occurrence(namespace, name) -> Null() // FIXME
   
-  transform-expr(|bindings): x@Match(expr, arms) -> <concat; statements-to-expression> [
-      [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id(rootterm)), <transform-expr(|bindings); cast-to-term> expr)]))],
-      <map(match-arm-to-if(|rootterm, bindings))> arms,
-      [Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not match term '\""), ExpressionName(Id(rootterm))), StringLiteral("\"'.\""))]))]
-    ] where rootterm := <newname> "term"
-  
-  transform-expr(|bindings): TypedExprTerm(constructor, args, UserTypeParams(type, _)) -> java:expr |[ new ~t(e, node.getId()) ]|
+  transform-expr(|bindings): TermIndex(r) -> java:expr |[ ~name.getProperty(~string).lattice ]|
+  where
+    name := <to-term-name> r
+  ; string := <to-string-literal> "position"
+
+  transform-expr(|bindings): TypedExprTerm(constructor, args, UserTypeParams(type, _)) -> java:expr |[ new ~type(e) ]|
   where
     e := <transform-expr(|bindings)> ExprTerm(constructor, args)
-  ; t := <concat-strings> [type, "Value"]
   transform-expr(|bindings): ExprTerm(constructor, args) -> NewInstance(
     None()
   , []
@@ -140,77 +137,86 @@ rules
     ]
   )
   
-  // Unsupported expressions
-  transform-expr(|bindings) = debug(!"Unsupported expression found ");fail
+  match-to-stmts: x@Match(expr, arms) -> (result, <concat> [
+      [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id(rootterm)), <transform-expr(|[]); cast-to-term> expr)]))],
+      [java:bstm |[ Lattice ~result = null; ]|],
+      <map(match-arm-to-if(|result, rootterm, []))> arms,
+      [java:bstm |[ if (~result == null) { throw new RuntimeException(~exception-string); } ]|]
+    ])
+  where
+    rootterm := <newname> "term" 
+  ; result := <newname> "result"
+  ; exception-string := <to-string-literal> "Could not match term"
   
+  match-arm-to-if(|result-name, rootterm, bindings): MatchArm(pattern, expr) -> If(<cfg-pattern-to-condition(|rootterm, bindings)> pattern, Block(statements))
+  where
+    pattern-vars := <pattern-to-decls(|rootterm, bindings)> pattern
+  ; newbindings := <concat; uniq> [bindings, <get-bindings> pattern]
+  ; result := <transform-expr(|newbindings)> expr
+  ; write-result := java:bstm |[ ~result-name = ~result; ]|
+  ; statements := <concat> [pattern-vars, [write-result]]
+    
   cast-to-int: expr -> CastPrimitive(NumericType([], Int()), expr)
   cast-to-bool: expr -> CastPrimitive(BooleanType([]), expr)
   
-  // set comprehension
-  set-comp-body(|bindings): (expr, predicates) -> [
-    LocVarDeclStm(LocalVarDecl([], ClassType(Id("Set"), None()), [ VariableDeclInit(VariableDecl(Id("result")), NewInstance(None(), [], Id("HashSet"), [], None(), []))])),
-    <set-comp-sources(|expr, nonsources, bindings)> sources,
-    Return(ExpressionName(Id("result")))
-  ]
-  where
-    sources := <filter(?SetCompExprSource(_))> predicates;
-    nonsources := <filter(not(?SetCompExprSource(_)))> predicates
+  add-origins(|vars): e -> <add-origins> (vars, e)
+  add-origins: ([], e) -> e
+  add-origins: ([Var(v)|t], e)      -> <add-origins> (t, java:expr |[ e.withOrigin(~v.origin()) ]|)
+  add-origins: ([Position(v)|t], e) -> <add-origins> (t, java:expr |[ e.withOrigin(Helpers.getTermPosition(~v-name)) ]|) where v-name := <to-term-name> v
   
-  set-comp-sources(|expr, predicates, bindings): [] -> <set-comp-predicates(|bindings)> (expr, predicates)
-  set-comp-sources(|expr, predicates, bindings): [SetCompExprSource(SetSource(PatternVar(var), set))|tail] -> ForEach([], ClassType(Id("Object"), None()), VariableDecl(Id(<to-term-name> var)), <transform-expr(|bindings);cast-to-set> set, Block([<set-comp-sources(|expr, predicates, bindings)> tail]))
-  set-comp-predicates(|bindings): (expr, []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id("result")), None(), Id("add"), [<transform-expr(|bindings)> expr]))
-  set-comp-predicates(|bindings): (expr, [h|t]) -> If(<transform-expr(|bindings)> h, Block([<set-comp-predicates(|bindings)> (expr, t)]))
+  // set comprehension
+  set-comp-body(|bindings): (expr, predicates) -> (name, [
+    java:bstm |[ Set ~name = new HashSet(); ]|,
+    <set-comp-sources(|expr, nonsources, bindings, name)> sources
+  ])
+  where
+    name := <newname> "result"
+  ; sources := <filter(?SetCompExprSource(_))> predicates
+  ; nonsources := <filter(not(?SetCompExprSource(_)))> predicates
+  
+  set-comp-result(|bindings): name -> java:expr |[ name ]| 
+  
+  set-comp-sources(|expr, predicates, bindings, result-name): [] -> <set-comp-predicates(|bindings, result-name)> (expr, predicates)
+  set-comp-sources(|expr, predicates, bindings, result-name): [SetCompExprSource(SetSource(PatternVar(var), set))|tail] ->
+  	java:bstm |[
+  		for (Object ~name : ~collection) {
+  			~stmts*
+  		}
+  	]|
+  with
+    name       := <to-term-name> var
+  ; collection := <transform-expr(|bindings); access-lattice-value; cast-to-set> set
+  ; stmts*     := [<set-comp-sources(|expr, predicates, bindings, result-name)> tail]
+
+  set-comp-predicates(|bindings, result-name): (expr, []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id(result-name)), None(), Id("add"), [<transform-expr(|bindings)> expr]))
+  set-comp-predicates(|bindings, result-name): (expr, [h|t]) -> If(<transform-expr(|bindings)> h, Block([<set-comp-predicates(|bindings, result-name)> (expr, t)]))
   
   // map comprehension
-  map-comp-body(|bindings): (bind, predicates) -> [
-    LocVarDeclStm(LocalVarDecl([], ClassType(Id("Map"), None()), [ VariableDeclInit(VariableDecl(Id("result")), NewInstance(None(), [], Id("HashMap"), [], None(), []))])),
-    <map-comp-sources(|bind, nonsources, bindings)> sources,
-    Return(ExpressionName(Id("result")))
-  ]
+  map-comp-body(|bindings): (bind, predicates) -> (name, [
+  	java:bstm |[ Map ~name = new HashMap(); ]|,
+    <map-comp-sources(|bind, nonsources, bindings, name)> sources
+  ])
   where
-    sources := <filter(?MapCompExprSource(_))> predicates;
-    nonsources := <filter(not(?MapCompExprSource(_)))> predicates
+  	name := <newname> "result"
+  ; sources := <filter(?MapCompExprSource(_))> predicates
+  ; nonsources := <filter(not(?MapCompExprSource(_)))> predicates
   
-  map-comp-sources(|bind, predicates, bindings): [] -> <map-comp-predicates(|bindings)> (bind, predicates)
-  map-comp-sources(|bind, predicates, bindings): [MapCompExprSource(MapSource(PatternVar(k), PatternVar(v), map))|tail] -> 
-    ForEach(
-      [], 
-      ClassOrInterfaceTypeMember(ClassType(Id("Map"), None()), [], Id("Entry"), Some(TypeArguments([ ClassType([], Id("Object"), None()), ClassType([], Id("Object"), None())]))),
-      VariableDecl(Id("e")),
-      <transform-expr(|bindings); cast-to-map> map, 
-      Block(
-        [LocVarDeclStm(
-		  LocalVarDecl(
-		    []
-		  , ClassType(Id("Object"), None())
-		  , [ VariableDeclInit(
-		        VariableDecl(Id("k_t"))
-		      , InvokeQExp(ExpressionName(Id("e")), None(), Id("getKey"), [])
-		      )
-		    ]
-		  )
-		),
-		LocVarDeclStm(
-		  LocalVarDecl(
-		    []
-		  , ClassType(Id("Object"), None())
-		  , [ VariableDeclInit(
-		        VariableDecl(Id("v_t"))
-		      , InvokeQExp(ExpressionName(Id("e")), None(), Id("getValue"), [])
-		      )
-		    ]
-		  )
-		),
-        <map-comp-sources(|bind, predicates, bindings)> tail])) // add k and v init
-  map-comp-predicates(|bindings): (MapBinding(k, v), []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id("result")), None(), Id("put"), [<transform-expr(|bindings)> k, <transform-expr(|bindings)> v]))
-  map-comp-predicates(|bindings): (bind, [h|t]) -> If(<transform-expr(|bindings)> h, Block([<map-comp-predicates(|bindings)> (bind, t)]))
+  map-comp-sources(|bind, predicates, bindings, result-name): [] -> <map-comp-predicates(|bindings, result-name)> (bind, predicates)
+  map-comp-sources(|bind, predicates, bindings, result-name): [MapCompExprSource(MapSource(PatternVar(k), PatternVar(v), map))|tail] -> 
+    java:bstm |[
+      for (Map.Entry<Object, Object> entry : ~map-expr) {
+        Object k_t = entry.getKey();
+        Object v_t = entry.getValue();
+        ~loop-stmt
+      }
+    ]|
+  with 
+    map-expr  := <transform-expr(|bindings)> map
+  ; loop-stmt := <map-comp-sources(|bind, predicates, bindings, result-name)> tail
     
-  // supplier wrapper
-  statements-to-expression: statements -> InvokeQExp(CastReference(ClassType([], Id("Supplier"), None()), [], LambdaExpressionWithBlock(Params(NoParams()), Block(statements))), None(), Id("get"), [])
+  map-comp-predicates(|bindings, result-name): (MapBinding(k, v), []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id(result-name)), None(), Id("put"), [<transform-expr(|bindings)> k, <transform-expr(|bindings)> v]))
+  map-comp-predicates(|bindings, result-name): (bind, [h|t]) -> If(<transform-expr(|bindings)> h, Block([<map-comp-predicates(|bindings, result-name)> (bind, t)]))
+    
+  // Unsupported expressions
+  transform-expr(|bindings) = debug(!"Unsupported expression found ");fail
   
-  match-arm-to-if(|rootterm, bindings): MatchArm(pattern, expr) -> If(<cfg-pattern-to-condition(|rootterm, bindings)> pattern, Block(statements))
-  where
-    pattern-vars := <pattern-to-decls(|rootterm, bindings)> pattern;
-    newbindings := <concat;uniq> [bindings, <get-bindings> pattern];
-    return := [Return(<transform-expr(|newbindings)> expr)];
-    statements := <concat> [pattern-vars, return]

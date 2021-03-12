@@ -10,31 +10,32 @@ flock/Flow
 
 context-free syntax // Properties
 
-PropDef.PropDef = [[PropName]: [Type]]
+	PropDef.PropDef = [[PropName]: [Type]]
 
 context-free syntax // Property Rules
 
-PropRule.PropRule = [[PropName]([PropPattern]) = [Expr] [PropWhere]]
-
-PropPattern.Backward = [[PropCFGNodePattern] -> [Var]]
-PropPattern.Forward = [[Var] -> [PropCFGNodePattern]]
-
-PropPattern.PropPatternAmbiguity = [[Var] -> [Var]]
-
-PropCFGNodePattern = Pattern
-PropCFGNodePattern.Entry = [[Pattern].entry]
-PropCFGNodePattern.Exit = [[Pattern].exit]
-
-PropPattern.PropPatternStart = [[Pattern].start]
-PropPattern.PropPatternEnd = [[Pattern].end]
-
-PropWhere.NoWhereClause =
-PropWhere.WhereClause = [where [{Binding "\n"}+]]
-
-Binding.Binding = [[Var] = [Expr]]
+	PropRule.PropRule = [[PropName]([PropPattern]) = [Expr] [PropWhere]]
+	
+	PropPattern.Backward = [[PropCFGNodePattern] -> [Var]]
+	PropPattern.Forward = [[Var] -> [PropCFGNodePattern]]
+	
+	PropPattern.PropPatternAmbiguity = [[Var] -> [Var]]
+	
+	PropCFGNodePattern = Pattern
+	PropCFGNodePattern.Entry = [[Pattern].entry]
+	PropCFGNodePattern.Exit = [[Pattern].exit]
+	
+	PropPattern.PropPatternStart = [[Pattern].start]
+	PropPattern.PropPatternEnd = [[Pattern].end]
+	
+	PropWhere.NoWhereClause =
+	PropWhere.WhereClause = [where [{Binding "\n"}+]]
+	
+	Binding.Binding = [[Var] = [Expr]]
+	Binding.TypedBinding = [[Var]: [Type] = [Expr]]
 
 context-free priorities
-PropCFGNodePattern = Pattern <0> .> Pattern.PatternVar
+	PropCFGNodePattern = Pattern <0> .> Pattern.PatternVar
 
 template options
 

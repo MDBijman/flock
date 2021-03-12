@@ -47,8 +47,12 @@ context-free syntax // expressions
 	
 	Expr.Match = [match [Expr] with [MatchArm+]] {longest-match}
 	
-	Expr.SetLiteral = [{ [{Expr ","}+] }]
-	Expr.TypedSetLiteral = [{[{Expr ","}+] }: [Type]]
+	Expr.WithOrigin = [[Expr]{[{Origin ","}*]}]
+	Origin.Var = Var
+	Origin.Position = [position([Var])]
+	Expr.Cast = [[Expr] as [Type]]
+	Expr.SetLiteral = [{ [{Expr ","}*] }]
+	Expr.TypedSetLiteral = [{[{Expr ","}*] }: [Type]]
 	Expr.SetComp = [{ [Expr] | [{SetCompExpr ", "}+] }]
 	Expr.MapLiteral = [{ [{MapBinding ","}+] }]
 	Expr.MapComp = [{ [MapBinding] | [{MapCompExpr ", "}+] }]
@@ -99,6 +103,7 @@ context-free syntax // expressions
 context-free priorities
   Expr.Appl >
   Expr.MapLookup >
+  Expr.Cast >
   { Expr.Not
     Expr.Neg } >
   { non-assoc:

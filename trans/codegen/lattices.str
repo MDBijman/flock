@@ -3,6 +3,7 @@ module codegen/lattices
 imports
   codegen/util
   codegen/setutils
+  codegen/types
   codegen/expressions
   
   signatures/flock/-
@@ -25,20 +26,21 @@ rules
   lattice-type-name = !"Lattice"
   lattice-type-id = !Id(<lattice-type-name>)
   lattice-type = !ClassType(<lattice-type-id>, None())
-  to-lattice-name = append-string(|<lattice-type-name>)
   to-lattice-name: Map(k, v) -> <append-string(|<lattice-type-name>)> "Map"
+  to-lattice-name: UserTypeParams(name, _) -> name
+  to-lattice-name = id
    
   lattice-classes(|r) = <filter(?LatticeDefParams(_, _, _));create-all-lattice-classes> r
   create-all-lattice-classes: r -> <map(lattice-to-class)> r
   
-  lattice-invocation(|lattice, f): args -> InvokeQExp(NewInstance(None(), [], Id(<to-lattice-name> lattice), [], None(), <lattice-to-constructor-args> lattice), None(), Id(f), <map(transform-expr)> args) with <debug> lattice
-  lattice-top(|lattice) = <lattice-invocation(|lattice, "top")> []
-  lattice-bottom(|lattice) = <lattice-invocation(|lattice, "bottom")> []
-  lattice-lub(|lattice): (l, r) -> <lattice-invocation(|lattice, "lub")> [l, r]
-  lattice-glb(|lattice): (l, r) -> <lattice-invocation(|lattice, "glb")> [l, r]
-  lattice-leq(|lattice): (l, r) -> <lattice-invocation(|lattice, "leq")> [l, r]
-  lattice-geq(|lattice): (l, r) -> <lattice-invocation(|lattice, "geq")> [l, r]
-  lattice-nleq(|lattice): (l, r) -> <lattice-invocation(|lattice, "nleq")> [l, r]
+  lattice-invocation(|lattice, f): args -> InvokeQExp(NewInstance(None(), [], Id(<to-lattice-name> lattice), [], None(), <lattice-to-constructor-args> lattice), None(), Id(f), <map(transform-expr)> args)
+  lattice-top(|lattice): _       -> java:expr |[ ~name.top()    ]| where name := <to-lattice-name> lattice
+  lattice-bottom(|lattice): _    -> java:expr |[ ~name.bottom() ]| where name := <to-lattice-name> lattice
+  lattice-lub(|lattice): (l, r)  -> java:expr |[ new ~name(~new_l).lub(~new_r)  ]| where name := <to-lattice-name> lattice; new_l := <transform-expr> l; new_r := <transform-expr> r 
+  lattice-glb(|lattice): (l, r)  -> java:expr |[ new ~name(~new_l).glb(~new_r)  ]| where name := <to-lattice-name> lattice; new_l := <transform-expr> l; new_r := <transform-expr> r 
+  lattice-leq(|lattice): (l, r)  -> java:expr |[ new ~name(~new_l).leq(~new_r)  ]| where name := <to-lattice-name> lattice; new_l := <transform-expr> l; new_r := <transform-expr> r
+  lattice-geq(|lattice): (l, r)  -> java:expr |[ new ~name(~new_l).geq(~new_r)  ]| where name := <to-lattice-name> lattice; new_l := <transform-expr> l; new_r := <transform-expr> r
+  lattice-nleq(|lattice): (l, r) -> java:expr |[ new ~name(~new_l).nleq(~new_r) ]| where name := <to-lattice-name> lattice; new_l := <transform-expr> l; new_r := <transform-expr> r
   
   lattice-to-constructor-args: Map(ktype, UserTypeParams(vtype, _)) -> [NewInstance(None(), [], Id(name), [], None(), [])] with name := <to-lattice-name> vtype
   lattice-to-constructor-args = ![]
@@ -47,62 +49,222 @@ rules
       []
     , Id(<to-lattice-name> name)
     , None()
-    , Some(SuperClass(ClassType([], Id("Lattice"), None())))
+    , Some(SuperClass(ClassType([], Id(superclass-name), None())))
     , None()
-    , <map(to-lattice-method);concat> functions
+    , <concat> [
+    	value-field,
+    	[<lattice-constructor> (lattice-name, lattice-value-name)],
+    	<lattice-value-getter> inner-type,
+    	<lattice-to-string> inner-type,
+    	<lattice-origin-getter> inner-type,
+    	<map(to-lattice-method(|lattice-name, lattice-value-name))> functions
+      ]
     )
-  to-lattice-method: LatticePartType(_) -> []
-  to-lattice-method: Bottom(expr) -> <create-lattice-method(|"bottom")> expr
-  to-lattice-method: Top(expr) -> <create-lattice-method(|"top")> expr
-  to-lattice-method: Lub(l, r, expr) -> <create-lattice-method(|"lub", l, r)> expr
-  to-lattice-method: TypedLub(l, lt, r, rt, expr) -> <create-lattice-method(|"lub", l, lt, r, rt)> expr
-  to-lattice-method: Glb(l, r, expr) -> <create-lattice-method(|"glb", l, r)> expr
-  to-lattice-method: Leq(l, r, expr) -> <create-lattice-boolean-method(|"leq", l, r)> expr
-  to-lattice-method: Geq(l, r, expr) -> <create-lattice-boolean-method(|"geq", l, r)> expr
-  to-lattice-method: NLeq(l, r, expr) -> <create-lattice-boolean-method(|"nleq", l, r)> expr
-   
-  access-value-term: (UserTypeParams(type, _), name) -> java:expr |[((~t) ~name).value]| with t := <concat-strings> [type, "Value"]
-
-  create-lattice-method(|name, l, lt, r, rt): expr -> [java:method-dec |[
-    @Override
-    public Object ~name(LatticeValue left, LatticeValue right) {
-      IStrategoTerm ~lterm = ~lexpr;
-      IStrategoTerm ~rterm = ~rexpr;
-      return ~java-expr;
-    }
-  ]|] 
   where
-    java-expr := <transform-expr> expr
-  ; lexpr := <access-value-term> (lt, "left")
-  ; lterm := <to-term-name> l
-  ; rexpr := <access-value-term> (rt, "right")
-  ; rterm := <to-term-name> r
-   
-  create-lattice-method(|name, l, r): expr -> [java:method-dec |[
-    @Override
-    public Object ~name(LatticeValue ~lname, LatticeValue ~rname) {
-      return ~java-expr;
-    }
-  ]|] 
-  where
-    java-expr := <transform-expr> expr
-  ; lname := <to-term-name> l
-  ; rname := <to-term-name> r
+    inner-type := <getfirst(lattice-part-type)> functions
+  ; lattice-value-name := <to-lattice-name> inner-type
+  ; value-field := <type-extends-lattice < ![] + ![java:classb-dec |[ ~lattice-value-name value; ]|]> inner-type
+  ; superclass-name := <type-to-superclass> inner-type
+  ; lattice-name := <to-lattice-name> name
   
-  create-lattice-method(|name): expr -> [java:method-dec |[
+    
+  lattice-part-type: LatticePartType(t) -> t
+  access-lattice-value: expr -> java:expr |[ ~expr.value() ]|
+  access-value-term: (UserTypeParams(type, _), name) -> java:expr |[((~t) ~name).value]| with t := <concat-strings> [type, "Value"]
+  
+  /*
+  * Lattice Constructor
+  */
+  lattice-constructor: (lattice-name, value-name) -> classb-dec |[
+    public ~lattice-name(~value-name v) {
+    	~constrinit:superinit
+    }
+  ]|
+  where
+    <is-map> value-name
+  with
+    superinit := java:constrinv |[ super(v); ]| 
+
+  lattice-constructor: (lattice-name, value-name) -> classb-dec |[
+    public ~lattice-name(~value-name v) {
+    	~bstm:constrinit
+    }
+  ]|
+  with
+    constrinit := java:bstm |[ this.value = v; ]| 
+  
+  lattice-value-getter: value-name -> [classb-dec |[
     @Override
-    public LatticeValue ~name() {
+    public Object value() {
+		return this.value.value;
+    }
+  ]|] where <not(type-extends-lattice)> value-name
+  lattice-value-getter: value-name -> []
+  
+  lattice-to-string: value-name -> [classb-dec |[
+    @Override
+    public String toString() {
+		return value.toString();
+    }
+  ]|] where <not(type-extends-lattice)> value-name
+  lattice-to-string: value-name -> []
+
+
+  lattice-origin-getter: value-name -> [classb-dec |[
+    @Override
+    public Set<CfgNodeId> origin() {
+		return this.value.origin;
+    }
+  ]|] where <not(type-extends-lattice)> value-name
+  lattice-origin-getter: value-name -> []
+  
+  /*
+  * The inner lattice type declaration does not map to a method
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): LatticePartType(_) -> []
+    
+  /*
+  * Lattice method: Top
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): Top(expr) -> java:method-dec |[
+    public static ~lattice-name top() {
       return ~java-expr;
     }
-  ]|] where java-expr := <transform-expr> expr
-
-  create-lattice-boolean-method(|name, l, r): expr -> [java:method-dec |[
+  ]| where java-expr := <transform-expr> expr
+    
+  /*
+  * Lattice method: Bottom
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): Bottom(expr) -> java:method-dec |[
+    public static ~lattice-name bottom() {
+      return ~java-expr;
+    }
+  ]|
+  where java-expr := <transform-expr> expr
+  
+  /*
+  * Lattice method: Least Upper Bound (Typed Arguments)
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): TypedLub(l, lt, r, rt, expr) -> java:method-dec |[
     @Override
-    public boolean ~name(LatticeValue ~lname, LatticeValue ~rname) {
+    public Lattice lub(Lattice other) {
+      Lattice l = this;
+      Lattice r = other;
+      ~ldecl
+      ~rdecl
+      ~bstm*:stmts
+      return ~res;
+    }
+  ]|
+  where
+    <requires-statements> expr
+  with
+    (res, stmts) := <expr-to-stmts> expr
+  ; lterm := <to-term-name> l
+  ; lcast := <value-cast(|lt)> java:expr |[ l ]| 
+  ; rterm := <to-term-name> r
+  ; rcast := <value-cast(|rt)> java:expr |[ r ]| 
+  ; lvalue-type := <value-type> lt
+  ; rvalue-type := <value-type> rt
+  ; ldecl := java:bstm |[ ~lvalue-type ~lterm = ~lcast; ]|
+  ; rdecl := java:bstm |[ ~rvalue-type ~rterm = ~rcast; ]|
+  
+  to-lattice-method(|lattice-name, lattice-value-name): TypedLub(l, lt, r, rt, expr) -> java:method-dec |[
+    @Override
+    public Lattice lub(Lattice other) {
+      Lattice l = this;
+      Lattice r = other;
+      ~ldecl
+      ~rdecl
+      return ~java-expr;
+    }
+  ]|
+  with
+    java-expr := <transform-expr; simple-cast(|lattice-value-name); construct-from(|lattice-name)> expr
+  ; lterm := <to-term-name> l
+  ; lcast := <value-cast(|lt)> java:expr |[ l ]| 
+  ; rterm := <to-term-name> r
+  ; rcast := <value-cast(|rt)> java:expr |[ r ]| 
+  ; lvalue-type := <value-type> lt
+  ; rvalue-type := <value-type> rt
+  ; ldecl := java:bstm |[ ~lvalue-type ~lterm = ~lcast; ]|
+  ; rdecl := java:bstm |[ ~rvalue-type ~rterm = ~rcast; ]|
+  
+
+  /*
+  * Lattice method: Least Upper Bound
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): Lub(l, r, expr) -> java:method-dec |[
+    @Override
+    public Lattice lub(Lattice other) {
+      Lattice l = this;
+      Lattice r = other;
+      ~lattice-value-name ~rname = ~rcast;
+      ~lattice-value-name ~lname = ~lcast;
+      return ~java-expr;
+    }
+  ]|
+  where
+    java-expr := <transform-expr; simple-cast(|lattice-value-name); construct-from(|lattice-name)> expr
+  ; lname := <to-term-name> l
+  ; lcast := <value-cast(|lattice-value-name)> java:expr |[ l.value() ]| 
+  ; rname := <to-term-name> r
+  ; rcast := <value-cast(|lattice-value-name)> java:expr |[ r.value() ]| 
+
+  /*
+  * Lattice method: Greatest Lower Bound
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): Glb(l, r, expr) -> java:method-dec |[
+    @Override
+    public Lattice glb(Lattice r) {
+      ~lattice-value-name ~rname = ~rcast;
+      ~lattice-value-name ~lname = ~lcast;
+      return ~java-expr;
+    }
+  ]|
+  where
+    java-expr := <transform-expr; simple-cast(|lattice-value-name); construct-from(|lattice-name)> expr
+  ; lname := <access-value-term> (l, "this")
+  ; lcast := <simple-cast(|lattice-value-name)> java:expr |[ this.value() ]| 
+  ; rname := <access-value-term> (r, "other")
+  ; rcast := <simple-cast(|lattice-value-name)> java:expr |[ r.value() ]| 
+
+  /*
+  * Lattice method: Less or Equal
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): Leq(l, r, expr) -> java:method-dec |[
+    @Override
+    public boolean leq(~lattice-name ~rname) {
+      ~lattice-value-name ~rname = ~rcast;
+      ~lattice-value-name ~lname = ~lcast;
       return (boolean) ~java-expr;
     }
-  ]|] 
+  ]|
   where
     java-expr := <transform-expr> expr
-  ; lname := <to-term-name> l
-  ; rname := <to-term-name> r
+  ; lname := <access-value-term> (l, "this")
+  ; lcast := <simple-cast(|lattice-value-name)> java:expr |[ this.value() ]| 
+  ; rname := <access-value-term> (r, "other")
+  ; rcast := <simple-cast(|lattice-value-name)> java:expr |[ r.value() ]| 
+
+  /*
+  * Lattice method: Greater or Equal
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): Geq(l, r, expr) -> java:method-dec |[
+    @Override
+    public boolean geq(~lattice-name ~lname, ~lattice-name ~rname) {
+      return (boolean) ~java-expr;
+    }
+  ]|
+  where java-expr := <transform-expr> expr; lname := <to-term-name> l; rname := <to-term-name> r
+ 
+  /*
+  * Lattice method: Not Less or Equal
+  */
+  to-lattice-method(|lattice-name, lattice-value-name): NLeq(l, r, expr) -> java:method-dec |[
+    @Override
+    public boolean nleq(~lattice-name ~lname, ~lattice-name ~rname) {
+      return (boolean) ~java-expr;
+    }
+  ]|
+  where java-expr := <transform-expr> expr; lname := <to-term-name> l; rname := <to-term-name> r

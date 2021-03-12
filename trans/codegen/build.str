@@ -129,6 +129,10 @@ rules
 		 		~boundary-check-root
 		 		~root-inits
 		 	}
+		 	for (Node node : nodeset) {
+		 		~boundary-check-node
+		 		~nodeset-inits
+		 	}
 		  	while(!worklist.isEmpty()) ~worklist-body
 		}
 	  }
@@ -138,10 +142,7 @@ rules
   ; boundary-check-root := <analysis-boundary-check(|name)> java:expr |[ root.interval ]|
   ; boundary-check-successor := <analysis-boundary-check(|name)> java:expr |[ successor.interval ]|
   ; default-boundary := <analysis-default-boundary> name
-  ; value-inits := <concat> [
-      <retain-all(?PropDef(_, UserTypeParams(_, _))); map(propdef-to-add)> r,
-	  <retain-all(?PropDef(_, _)); map(propdef-to-bottom)> r
-	]
+  ; value-inits := <retain-all(?PropDef(_, UserTypeParams(_, _))); map(propdef-to-add)> r
   ; stmt := <node-factory-switch> r
   ; val-setters := <get-newvalue-setters> r
   ; forward-updaters := <get-forward-updaters> r
@@ -176,21 +177,38 @@ rules
 	    }
   	  ]|]
     ])
-  ; root-inits := Block(<retain-all(?PropDef(_, _)); map(propdef-to-init)> r)
+  ; root-inits := <lift-single> Block(<retain-all(?PropDef(_, _)); map(propdef-to-init)> r)
+  ; nodeset-inits := <lift-single> Block(<retain-all(?PropDef(_, _)); map(propdef-to-nodeset-init)> r)
+ 
+  propdef-to-nodeset-init: PropDef(n, _) -> java:bstm |[
+	  {
+		Lattice init = node.getProperty(~name).lattice;
+		for (Node pred : ~predecessors) {
+		  Lattice live_o = pred.getProperty(~name).transfer.eval(pred);
+		  init = init.lub(live_o);
+		}
+		node.getProperty(~name).lattice = init;
+	  }   	
+    ]|
+  where
+    name := <to-string-literal> n
+  ; predecessors := <analysis-is-forward; ?|[ true ]| < !|[ g.parentsOf(node) ]| + !|[ g.childrenOf(node) ]|> n
 
-  
   get-newvalue-setters = filter(?PropDef(_, _)); map(propdef-to-newvalue)
 
-  propdef-to-newvalue: PropDef(name, _) -> java:bstm |[ Object ~new-name = node.getProperty(~prop-name).transfer.eval(node); ]|
+  propdef-to-newvalue: PropDef(name, _) -> java:bstm |[ Lattice ~new-name = node.getProperty(~prop-name).transfer.eval(node); ]|
   where
     new-name := $[[name]_n]
   ; prop-name := <to-string-literal> name
  
-  propdef-to-bottom: PropDef(n, _) -> java:bstm |[ node.getProperty(~name).value = node.getProperty(~name).lattice.bottom(); ]|
-    where name := <to-string-literal> n
+  propdef-to-add: PropDef(n, UserTypeParams(tname, _)) -> java:bstm |[
+  	node.addProperty(~name, ~tname.bottom());
+  ]| where name := <to-string-literal> n
                     
-  propdef-to-add: PropDef(n, UserTypeParams(tname, _)) -> java:bstm |[ node.addProperty(~name, Lattices.~tname); ]|
-    where name := <to-string-literal> n
-                    
-  propdef-to-init: PropDef(n, _) -> java:bstm |[ root.getProperty(~name).value = root.getProperty(~name).init.eval(root); ]| 
-    where name := <to-string-literal> n
+  propdef-to-init: PropDef(n, _) -> java:bstm |[
+  	root.getProperty(~name).lattice = root.getProperty(~name).init.eval(root);
+  ]| where name := <to-string-literal> n
+
+  lift-single: Block([stmt]) -> stmt
+  lift-single: Block(s) -> <id>
+  
