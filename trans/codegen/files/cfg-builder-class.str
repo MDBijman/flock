@@ -1,0 +1,60 @@
+module codegen/cfg-builder-class
+
+imports
+
+  codegen/-
+
+  signatures/flock/-
+  signatures/flock/desugar/-
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+  
+strategies
+
+  module-to-cfggraph-java: m@Module(_, _, r) -> java:compilation-unit |[ 
+      package org.spoofax;
+      ~import-dec*:imports
+      ~type-dec:class
+    ]|
+  with
+    imports := <all-imports> 
+  ; class := <graph-class(|r)> m
+
+  property-type = !ClassType(Id("Property"), None())
+  to-property-name = append-string(|"Property")
+ 
+  concat-sets = filter(?(PropDef(_, _)));concat-sets-internal
+  concat-sets-internal: [] -> StringLiteral("\"\\\"];\\n\"")
+  concat-sets-internal: [h@PropDef(_, _) | t] -> Add(<propdef-to-literal> h, <concat-sets-internal> t)
+  propdef-to-literal: PropDef(name, _) -> InvokeQExp(ExpressionName(AmbiguousName(Id("node")), Id(<to-property-name> name)), None(), Id("toGraphviz"), [])
+  
+  graph-type-id = !Id("CfgGraph")
+  graph-type = !ClassType(<graph-type-id>, None())
+  
+  graph-class(|r): _ -> java:type-dec |[
+  	public class GraphFactory {
+
+		~create-cfg-method-public
+		~create-cfg-method-intern
+
+		public static Node getTermNode(IStrategoTerm n) {
+			if (n.getAnnotations().size() == 0)
+				return null;
+			assert TermUtils.isAppl(n.getAnnotations().getSubterm(0), ~flock-node-id, 1);
+			IStrategoInt id = (IStrategoInt) n.getAnnotations().getSubterm(0).getSubterm(0);
+			return new Node(new CfgNodeId(id.intValue()));
+		}
+  	}
+  ]|
+  where
+    create-cfg-method-public := <cfg-matcher-method-public> r
+  ; create-cfg-method-intern := <cfg-matcher-method-internal> r
+  ; flock-node-id := <to-string-literal> "FlockNodeId"
+  

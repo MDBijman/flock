@@ -19,7 +19,7 @@ strategies
   
   value-cast(|type): expr -> <value-cast> (type, expr)
   value-cast: (Map(_, _), expr) -> java |[ (MapLattice) ~expr ]|
-  value-cast: (typename, expr) -> java |[ (IStrategoTerm) ~expr.value() ]|
+  value-cast: (typename, expr) -> java |[ (IStrategoTerm) ~expr.toTerm() ]|
 
   value-type: Map(_, _) -> java:type |[ MapLattice ]|
   value-type: typename -> java:type |[ IStrategoTerm ]|
@@ -29,12 +29,21 @@ strategies
   construct-from: (Map(_, _), expr) -> java |[ new MapLattice(~expr) ]|
   construct-from: (name, expr) -> java:expr |[ new ~name(~expr) ]|
   
+  to-value-name(|name): Map(_, _) -> <concat-strings> [name] where <debug> (name, "map")
+  to-value-name(|name): UserTypeParams(_, _) -> <concat-strings> [name, "_v"]
+  
   type-to-java: UserTypeParams(name, _) -> ClassType(Id(name), None())
   type-to-java: Map(_, _) -> ClassType(Id("MapLattice"), None())
   
-  type-to-superclass: UserTypeParams(name, _) -> "Lattice"
-  type-to-superclass: Map(_, _) -> "MapLattice"
+  lattice-type-to-superclass: Map(_, _) -> "MapLattice"
+  lattice-type-to-superclass: Set(_) -> "SetLattice"
   
+  lattice-kind-to-interface: Value() -> "FlockValueLattice"
+  lattice-kind-to-interface: ValueWithDependencies() -> "FlockValueLattice"
+  lattice-kind-to-interface: Collection() -> "FlockCollectionLattice"
+  lattice-kind-to-interface: CollectionWithDependencies() -> "FlockCollectionLattice"
+  lattice-kind-to-interface: None() -> "FlockLattice"
+    
   type-extends-lattice: Map(_, _) -> <id>
   type-extends-lattice: UserTypeParams(name, _) -> <fail>
   

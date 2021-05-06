@@ -2,9 +2,9 @@ module CodeGen
 
 menus
   menu: "CodeGen" (source) (openeditor)
-    action: "Show Java AST" = debug-show-java-ast
-    action: "Show Java code" = debug-show-java
-    action: "Show CfgGraph Java code" = debug-show-cfggraph-java
-    action: "Show Analysis Java code" = debug-show-analysis-java
+    action: "Show Analysis AST" = debug-show-java-ast
+    action: "Show Analysis code" = debug-show-java
+    action: "Show Property code" = debug-show-props-java
+    action: "Show Graph Building code" = debug-show-cfggraph-java
 
    

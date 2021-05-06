@@ -30,6 +30,7 @@ rules
   notcontains(|target): x@[head|tail] -> x where <equal> (target, head) < fail + <notcontains(|target)> tail
   
   to-term-name = append-string(|"_t")
+  to-value-name = append-string(|"_v")
   to-set-name = append-string(|"_set")
   
   escape-string-expr: expr -> InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(InvokeQExp(expr, None(), Id("replace"), [StringLiteral("\"\\\\\""), StringLiteral("\"\\\\\\\\\"")]), None(), Id("replace"), [StringLiteral("\"\\t\""), StringLiteral("\"\\\\t\"")]), None(), Id("replace"), [StringLiteral("\"\\b\""), StringLiteral("\"\\\\b\"")]), None(), Id("replace"), [StringLiteral("\"\\n\""), StringLiteral("\"\\\\n\"")]), None(), Id("replace"), [StringLiteral("\"\\r\""), StringLiteral("\"\\\\r\"")]), None(), Id("replace"), [StringLiteral("\"\\f\""), StringLiteral("\"\\\\f\"")]), None(), Id("replace"), [StringLiteral("\"\\'\""), StringLiteral("\"\\\\'\"")]), None(), Id("replace"), [StringLiteral("\"\\\"\""), StringLiteral("\"\\\\\\\"\"")])
@@ -37,3 +38,8 @@ rules
   lookup-with-default(transform, default): (key, []) -> <default> key
   lookup-with-default(transform, default): (key, [(key, value)|_]) -> <transform> (key, value)
   lookup-with-default(transform, default): (key, [_|tail]) -> <lookup-with-default(transform, default)> (key, tail)
+  
+  cast-to-term: expr -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("toTerm"), [expr])
+  get-subterm(|index): expr -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("at"), [expr, Deci(<int-to-string> index)])
+  add-or-concat: (l, r) -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("add"), [l, r])
+  

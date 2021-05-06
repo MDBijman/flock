@@ -61,11 +61,11 @@ desugar-cfgrule: CFGRuleNoParams(root, pattern) -> CFGRuleParams(root, pattern, 
 
 desugar-usertype: UserTypeNoParams(name) -> UserTypeParams(name, [])
 
-desugar-typedef: TypeDefNoParams(n, c*) -> TypeDefParams(n, [], c*)
+desugar-typedef: TypeDefNoParams(n, k, c*) -> TypeDefParams(n, [], k, c*)
 
 desugar-fundef: FunDefNoParams(n, a, e) -> FunDefParams(n, [], a, e)
 
-desugar-latticedef: LatticeDefNoParams(n, b) -> LatticeDefParams(n, [], b)
+desugar-latticedef: LatticeDefNoParams(n, k, b) -> LatticeDefParams(n, [], k, b)
 
 alt-syntax: Module(name, sections) -> Module(name, imports, definitions)
 with imports := <extract-imports> sections

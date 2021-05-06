@@ -3,8 +3,12 @@ module flock
 imports
   desugar
   pp
-  analysis
-  codegen/build
+  pp/metaborg-java-pp
+  pp/metaborg-java-parenthesize
+  libstratego-gpp
+  codegen/files/analysis-class
+  codegen/files/cfg-builder-class
+  codegen/files/properties-class
 
 rules // Debugging
   
@@ -24,23 +28,40 @@ rules // Debugging
     (node, _, _, path, project-path) -> (filename, result)
     with
       filename := <guarantee-extension(|"java.aterm")> path
-    ; result   := <flo-to-java-ast> node
-  
+    ; result   := <flo-to-analysis-java> node
+
   debug-show-java:
     (node, _, _, path, project-path) -> (filename, result)
     with
       filename := <guarantee-extension(|"java")> path
-    ; result   := <flo-to-java> node
+    ; result   := <flo-to-analysis-java; java-ast-to-code> node
+
+  debug-show-props-java:
+    (node, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <guarantee-extension(|"props.java")> path
+    ; result   := <flo-to-props-java; java-ast-to-code> node  
 
   debug-show-cfggraph-java:
     (node, _, _, path, project-path) -> (filename, result)
     with
       filename := <concat-strings> [<dirname> path, "/", "CfgGraph.java"]
     ; result   := <flo-to-cfggraph-java; java-ast-to-code> node
-        
-  debug-show-analysis-java:
-    (node, _, _, path, project-path) -> (filename, result)
-    with
-      filename := <concat-strings> [<dirname> path, "/", "Analysis.java"]
-    ; result   := <flo-to-analysis-java; java-ast-to-code> node     
+
+rules
+
+  java-ast-to-code =
+    parenthesize-metaborg-java
+    ; prettyprint-metaborg-java-start-symbols
+    ; !V([], <id>)
+    ; box2text-string(|120)
+
+rules
+
+  flo-to-analysis-java = desugar-all; module-to-analysis-java
+
+  flo-to-props-java = desugar-all; module-to-props-java
+
+  flo-to-cfggraph-java = desugar-all; module-to-cfggraph-java
     
+

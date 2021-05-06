@@ -35,7 +35,7 @@ rules
   create-transfer-class: (PropRule(prop, pat, expr, wc), index) -> java:type-dec |[
 	class ~name extends TransferFunction {
 		@Override
-		public Lattice eval(Node node) {
+		public FlockLattice eval(Node node) {
 			~bstm*:statements
 		}
 	}

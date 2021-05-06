@@ -23,14 +23,14 @@ rules
   create-lattice-map: r -> <filter(?PropDef(_, _));map(create-lattice-tuple)> r
   create-lattice-tuple: PropDef(prop, UserTypeParams(lattice, _)) -> (prop, lattice)
   
-  lattice-type-name = !"Lattice"
+  lattice-type-name = !"FlockLattice"
   lattice-type-id = !Id(<lattice-type-name>)
   lattice-type = !ClassType(<lattice-type-id>, None())
-  to-lattice-name: Map(k, v) -> <append-string(|<lattice-type-name>)> "Map"
+  to-lattice-name: Map(k, v) -> "MapLattice"
   to-lattice-name: UserTypeParams(name, _) -> name
-  to-lattice-name = id
+  to-lattice-name: n -> n
    
-  lattice-classes(|r) = <filter(?LatticeDefParams(_, _, _));create-all-lattice-classes> r
+  lattice-classes(|r) = <filter(?LatticeDefParams(_, _, _, _));create-all-lattice-classes> r
   create-all-lattice-classes: r -> <map(lattice-to-class)> r
   
   lattice-invocation(|lattice, f): args -> InvokeQExp(NewInstance(None(), [], Id(<to-lattice-name> lattice), [], None(), <lattice-to-constructor-args> lattice), None(), Id(f), <map(transform-expr)> args)
@@ -45,29 +45,49 @@ rules
   lattice-to-constructor-args: Map(ktype, UserTypeParams(vtype, _)) -> [NewInstance(None(), [], Id(name), [], None(), [])] with name := <to-lattice-name> vtype
   lattice-to-constructor-args = ![]
 
-  lattice-to-class: LatticeDefParams(name, _, functions) -> ClassDeclaration(
-      []
-    , Id(<to-lattice-name> name)
-    , None()
-    , Some(SuperClass(ClassType([], Id(superclass-name), None())))
-    , None()
-    , <concat> [
-    	value-field,
-    	[<lattice-constructor> (lattice-name, lattice-value-name)],
-    	<lattice-value-getter> inner-type,
-    	<lattice-to-string> inner-type,
-    	<lattice-origin-getter> inner-type,
-    	<map(to-lattice-method(|lattice-name, lattice-value-name))> functions
-      ]
-    )
+  lattice-to-class: LatticeDefParams(name, _, kind, functions) -> class
   where
     inner-type := <getfirst(lattice-part-type)> functions
   ; lattice-value-name := <to-lattice-name> inner-type
   ; value-field := <type-extends-lattice < ![] + ![java:classb-dec |[ ~lattice-value-name value; ]|]> inner-type
-  ; superclass-name := <type-to-superclass> inner-type
-  ; lattice-name := <to-lattice-name> name
-  
-    
+  where
+    lattice-name    := <to-lattice-name> name
+  ; constructor     := <lattice-constructor> (lattice-name, lattice-value-name)
+  ; value-getter    := <lattice-value-getter> inner-type
+  ; to-string       := <lattice-to-string> inner-type
+  ; lattice-methods := <map(to-lattice-method(|lattice-name, lattice-value-name, kind))> functions
+  where
+    superclass-name := <lattice-type-to-superclass> inner-type
+  ; interface-name  := <lattice-kind-to-interface> kind
+  ; class := java:type-dec |[
+    class ~lattice-name extends ~superclass-name implements ~interface-name {
+      ~*value-field
+      ~constructor
+      ~*value-getter
+      ~*to-string
+      ~*lattice-methods
+    }
+  ]|
+  <+ interface-name  := <lattice-kind-to-interface> kind
+   ; class := java:type-dec |[
+     class ~lattice-name implements ~interface-name {
+       ~*value-field
+       ~constructor
+       ~*value-getter
+       ~*to-string
+       ~*lattice-methods
+     }
+   ]|
+  <+ class := java:type-dec |[
+     class ~lattice-name {
+       ~*value-field
+       ~constructor
+       ~*value-getter
+       ~*to-string
+       ~*lattice-methods
+     }
+   ]|
+      
   lattice-part-type: LatticePartType(t) -> t
   access-lattice-value: expr -> java:expr |[ ~expr.value() ]|
   access-value-term: (UserTypeParams(type, _), name) -> java:expr |[((~t) ~name).value]| with t := <concat-strings> [type, "Value"]
@@ -95,8 +115,8 @@ rules
   
   lattice-value-getter: value-name -> [classb-dec |[
     @Override
-    public Object value() {
-		return this.value.value;
+    public FlockValue value() {
+		return this.value;
     }
   ]|] where <not(type-extends-lattice)> value-name
   lattice-value-getter: value-name -> []
@@ -108,25 +128,16 @@ rules
     }
   ]|] where <not(type-extends-lattice)> value-name
   lattice-to-string: value-name -> []
-
-
-  lattice-origin-getter: value-name -> [classb-dec |[
-    @Override
-    public Set<CfgNodeId> origin() {
-		return this.value.origin;
-    }
-  ]|] where <not(type-extends-lattice)> value-name
-  lattice-origin-getter: value-name -> []
   
   /*
   * The inner lattice type declaration does not map to a method
   */
-  to-lattice-method(|lattice-name, lattice-value-name): LatticePartType(_) -> []
+  to-lattice-method(|lattice-name, lattice-value-name, kind): LatticePartType(_) -> []
     
   /*
   * Lattice method: Top
   */
-  to-lattice-method(|lattice-name, lattice-value-name): Top(expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Top(expr) -> java:method-dec |[
     public static ~lattice-name top() {
       return ~java-expr;
     }
@@ -135,7 +146,7 @@ rules
   /*
   * Lattice method: Bottom
   */
-  to-lattice-method(|lattice-name, lattice-value-name): Bottom(expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Bottom(expr) -> java:method-dec |[
     public static ~lattice-name bottom() {
       return ~java-expr;
     }
@@ -145,13 +156,12 @@ rules
   /*
   * Lattice method: Least Upper Bound (Typed Arguments)
   */
-  to-lattice-method(|lattice-name, lattice-value-name): TypedLub(l, lt, r, rt, expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): TypedLub(l, lt, r, rt, expr) -> java:method-dec |[
     @Override
-    public Lattice lub(Lattice other) {
-      Lattice l = this;
-      Lattice r = other;
-      ~ldecl
-      ~rdecl
+    public FlockLattice lub(FlockLattice other) {
+      ~*lattice-decls
+      ~term-decl-left
+      ~term-decl-right
       ~bstm*:stmts
       return ~res;
     }
@@ -161,78 +171,71 @@ rules
   with
     (res, stmts) := <expr-to-stmts> expr
   ; lterm := <to-term-name> l
-  ; lcast := <value-cast(|lt)> java:expr |[ l ]| 
   ; rterm := <to-term-name> r
-  ; rcast := <value-cast(|rt)> java:expr |[ r ]| 
+  ; lcast := <value-cast(|lt)> java:expr |[ l_v ]| 
+  ; rcast := <value-cast(|rt)> java:expr |[ r_v ]| 
   ; lvalue-type := <value-type> lt
   ; rvalue-type := <value-type> rt
-  ; ldecl := java:bstm |[ ~lvalue-type ~lterm = ~lcast; ]|
-  ; rdecl := java:bstm |[ ~rvalue-type ~rterm = ~rcast; ]|
+  ; lattice-decls := <kind-to-declarations> kind
+  ; term-decl-left  := java:bstm |[ ~lvalue-type ~lterm = ~lcast; ]|
+  ; term-decl-right := java:bstm |[ ~rvalue-type ~rterm = ~rcast; ]|
+      
   
-  to-lattice-method(|lattice-name, lattice-value-name): TypedLub(l, lt, r, rt, expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): TypedLub(l, lt, r, rt, expr) -> java:method-dec |[
     @Override
-    public Lattice lub(Lattice other) {
-      Lattice l = this;
-      Lattice r = other;
-      ~ldecl
-      ~rdecl
+    public FlockLattice lub(FlockLattice other) {
+      ~*lattice-decls
+      ~l-value-decl
+      ~r-value-decl
       return ~java-expr;
     }
   ]|
   with
     java-expr := <transform-expr; simple-cast(|lattice-value-name); construct-from(|lattice-name)> expr
-  ; lterm := <to-term-name> l
-  ; lcast := <value-cast(|lt)> java:expr |[ l ]| 
-  ; rterm := <to-term-name> r
-  ; rcast := <value-cast(|rt)> java:expr |[ r ]| 
-  ; lvalue-type := <value-type> lt
-  ; rvalue-type := <value-type> rt
-  ; ldecl := java:bstm |[ ~lvalue-type ~lterm = ~lcast; ]|
-  ; rdecl := java:bstm |[ ~rvalue-type ~rterm = ~rcast; ]|
-  
+  ; lattice-decls := <kind-to-declarations> kind
+  ; l-value-decl := <make-value-declarations> (l, lt)
+  ; r-value-decl := <make-value-declarations> (r, rt)
+
 
   /*
   * Lattice method: Least Upper Bound
   */
-  to-lattice-method(|lattice-name, lattice-value-name): Lub(l, r, expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Lub(l, r, expr) -> java:method-dec |[
     @Override
-    public Lattice lub(Lattice other) {
-      Lattice l = this;
-      Lattice r = other;
-      ~lattice-value-name ~rname = ~rcast;
-      ~lattice-value-name ~lname = ~lcast;
+    public FlockLattice lub(FlockLattice other) {
+      ~*lattice-decls
+      ~l-value-decl
+      ~r-value-decl
       return ~java-expr;
     }
   ]|
   where
     java-expr := <transform-expr; simple-cast(|lattice-value-name); construct-from(|lattice-name)> expr
-  ; lname := <to-term-name> l
-  ; lcast := <value-cast(|lattice-value-name)> java:expr |[ l.value() ]| 
-  ; rname := <to-term-name> r
-  ; rcast := <value-cast(|lattice-value-name)> java:expr |[ r.value() ]| 
-
+  ; lattice-decls := <kind-to-declarations> kind
+  ; l-value-decl := <make-value-declarations(|lattice-value-name)> l
+  ; r-value-decl := <make-value-declarations(|lattice-value-name)> r
+  
   /*
   * Lattice method: Greatest Lower Bound
   */
-  to-lattice-method(|lattice-name, lattice-value-name): Glb(l, r, expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Glb(l, r, expr) -> java:method-dec |[
     @Override
-    public Lattice glb(Lattice r) {
-      ~lattice-value-name ~rname = ~rcast;
-      ~lattice-value-name ~lname = ~lcast;
+    public FlockLattice glb(FlockLattice r) {
+      ~l-value-decl
+      ~r-value-decl     
       return ~java-expr;
     }
   ]|
   where
     java-expr := <transform-expr; simple-cast(|lattice-value-name); construct-from(|lattice-name)> expr
-  ; lname := <access-value-term> (l, "this")
-  ; lcast := <simple-cast(|lattice-value-name)> java:expr |[ this.value() ]| 
-  ; rname := <access-value-term> (r, "other")
-  ; rcast := <simple-cast(|lattice-value-name)> java:expr |[ r.value() ]| 
+  ; l-value-decl := <make-value-declarations(|lattice-value-name)> l
+  ; r-value-decl := <make-value-declarations(|lattice-value-name)> r
+
 
   /*
   * Lattice method: Less or Equal
   */
-  to-lattice-method(|lattice-name, lattice-value-name): Leq(l, r, expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Leq(l, r, expr) -> java:method-dec |[
     @Override
     public boolean leq(~lattice-name ~rname) {
       ~lattice-value-name ~rname = ~rcast;
@@ -243,14 +246,14 @@ rules
   where
     java-expr := <transform-expr> expr
   ; lname := <access-value-term> (l, "this")
-  ; lcast := <simple-cast(|lattice-value-name)> java:expr |[ this.value() ]| 
   ; rname := <access-value-term> (r, "other")
+  ; lcast := <simple-cast(|lattice-value-name)> java:expr |[ this.value() ]| 
   ; rcast := <simple-cast(|lattice-value-name)> java:expr |[ r.value() ]| 
 
   /*
   * Lattice method: Greater or Equal
   */
-  to-lattice-method(|lattice-name, lattice-value-name): Geq(l, r, expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Geq(l, r, expr) -> java:method-dec |[
     @Override
     public boolean geq(~lattice-name ~lname, ~lattice-name ~rname) {
       return (boolean) ~java-expr;
@@ -261,10 +264,55 @@ rules
   /*
   * Lattice method: Not Less or Equal
   */
-  to-lattice-method(|lattice-name, lattice-value-name): NLeq(l, r, expr) -> java:method-dec |[
+  to-lattice-method(|lattice-name, lattice-value-name, kind): NLeq(l, r, expr) -> java:method-dec |[
     @Override
     public boolean nleq(~lattice-name ~lname, ~lattice-name ~rname) {
       return (boolean) ~java-expr;
     }
   ]|
   where java-expr := <transform-expr> expr; lname := <to-term-name> l; rname := <to-term-name> r
+
+  /*
+  * Helpers
+  */
+  
+  kind-to-declarations: Value() -> java:bstm* |[
+	FlockValueLattice l = this;
+	FlockValueLattice r = (FlockValueLattice) other;
+	FlockValue l_v = l.value();
+	FlockValue r_v = r.value();
+  ]| 
+
+  kind-to-declarations: ValueWithDependencies() -> java:bstm* |[
+	FlockValueLattice l = this;
+	FlockValueLattice r = (FlockValueLattice) other;
+	FlockValueWithDependencies l_v = (FlockValueWithDependencies) l.value();
+	FlockValueWithDependencies r_v = (FlockValueWithDependencies) r.value();
+  ]|   
+  
+  kind-to-declarations: Collection() -> java:bstm* |[
+  	FlockCollectionLattice l = this;
+  	FlockCollectionLattice r = (FlockCollectionLattice) other;
+  ]| 
+  
+  kind-to-declarations: None() -> java:bstm* |[
+  	FlockLattice l = this;
+  	FlockLattice r = (FlockLattice) other;
+  ]|
+  
+  make-value-declarations: (l, lt) -> res
+  where
+    l-val-name := <to-value-name(|l)> lt
+  ; lcast := <value-cast(|lt)> java:expr |[ ~l-val-name ]| 
+  ; lterm := <to-term-name> l
+  ; lvalue-type := <value-type> lt
+  ; res := java:bstm |[ ~lvalue-type ~lterm = ~lcast; ]|
+  
+  make-value-declarations(|lattice-value-name): (l, r) -> [lres, rres]
+  where
+    lname := <to-term-name> l
+  ; rname := <to-term-name> r
+  ; lcast := <value-cast(|lattice-value-name)> java:expr |[ ~l ]| 
+  ; rcast := <value-cast(|lattice-value-name)> java:expr |[ ~r ]| 
+  ; lres := java:bstm |[ ~lattice-value-name ~lname = ~lcast; ]|
+  ; rres := java:bstm |[ ~lattice-value-name ~rname = ~rcast; ]|

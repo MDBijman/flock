@@ -7,7 +7,6 @@ imports
   codegen/cfg-matcher
   codegen/user-functions
   codegen/types
-  codegen/helpers
 
   signatures/flock/-
   signatures/flock/desugar/-
@@ -139,7 +138,7 @@ rules
   
   match-to-stmts: x@Match(expr, arms) -> (result, <concat> [
       [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id(rootterm)), <transform-expr(|[]); cast-to-term> expr)]))],
-      [java:bstm |[ Lattice ~result = null; ]|],
+      [java:bstm |[ FlockLattice ~result = null; ]|],
       <map(match-arm-to-if(|result, rootterm, []))> arms,
       [java:bstm |[ if (~result == null) { throw new RuntimeException(~exception-string); } ]|]
     ])
@@ -161,7 +160,7 @@ rules
   
   add-origins(|vars): e -> <add-origins> (vars, e)
   add-origins: ([], e) -> e
-  add-origins: ([Var(v)|t], e)      -> <add-origins> (t, java:expr |[ e.withOrigin(~v.origin()) ]|)
+  add-origins: ([Var(v)|t], e)      -> <add-origins> (t, java:expr |[ e.withOrigin(~v-name.dependencies()) ]|) where v-name := <to-value-name> v
   add-origins: ([Position(v)|t], e) -> <add-origins> (t, java:expr |[ e.withOrigin(Helpers.getTermPosition(~v-name)) ]|) where v-name := <to-term-name> v
   
   // set comprehension
@@ -204,7 +203,8 @@ rules
   map-comp-sources(|bind, predicates, bindings, result-name): [] -> <map-comp-predicates(|bindings, result-name)> (bind, predicates)
   map-comp-sources(|bind, predicates, bindings, result-name): [MapCompExprSource(MapSource(PatternVar(k), PatternVar(v), map))|tail] -> 
     java:bstm |[
-      for (Map.Entry<Object, Object> entry : ~map-expr) {
+      for (Object o : ~map-expr) {
+      	Entry entry = (Entry) o;
         Object k_t = entry.getKey();
         Object v_t = entry.getValue();
         ~loop-stmt

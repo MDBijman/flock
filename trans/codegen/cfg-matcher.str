@@ -3,8 +3,6 @@ module codegen/cfg-matcher
 imports
   codegen/util
   codegen/nodes
-  codegen/graph
-  codegen/helpers
 
   signatures/flock/-
   signatures/flock/desugar/-
@@ -21,69 +19,60 @@ imports
 
 rules
 
-  cfg-collector-method: r -> result
+  cfg-matcher-method-public: r -> result
   where
-    root-rules := <filter(?(CFGRule(Root(), _, _)))> r;
-    root-condition := <create-root-condition> root-rules;
-    result := java:method-dec |[
-		private static Set<CfgNode> createCfgs(IStrategoTerm term) {
-			Set<CfgNode> nodes = new HashSet<>();
-			if (TermUtils.isAppl(term)) {
-				if (~expr:root-condition) {
-					nodes.addAll(createCfg(term).getLeft());
-				}
-			}
-			for (IStrategoTerm subterm : term.getSubterms()) {
-				nodes.addAll(createCfgs(subterm));
-			}
-			return nodes;
-		}
-    ]|
-        
-  create-root-condition: r -> <map(extract-pattern;cfg-pattern-to-condition(|"term", [])); root-condition-to-or> r
-  extract-pattern: CFGRule(_, pattern, _) -> pattern
-  root-condition-to-or: [h] -> h
-  root-condition-to-or: [h|t] -> LazyOr(h, <root-condition-to-or> t)
-
-  cfg-matcher-method: r -> result
-  where
-    cfg-rules := <filter(?(CFGRule(_, _, _)))> r
-  ; switch := <cfg-matcher-switch> cfg-rules
+    cfg-rules := <filter(?(CFGRule(Root(), _, _)))> r
+  ; switch := <cfg-matcher-switch-internal(empty-block)> cfg-rules
   ; result := java:method-dec |[
       public static Graph createCfg(IStrategoTerm term) {
 		Graph result_graph = new Graph();
+		for (IStrategoTerm subterm : term.getSubterms()) {
+			Graph subgraph = createCfg(subterm);
+			if (subgraph.size() != 0) {
+				result_graph.mergeGraph(subgraph);
+			}
+		}
+		
 		~stm:switch
+		
 		return result_graph;
   	  }
     ]|
-  
-  cfg-matcher-switch: r -> java |[
-  	if (TermUtils.isList(term)) {
-		IStrategoList list = M.list(term);
-		if (list.isEmpty()) {
-			return new Graph();
-		}
-		result_graph.mergeGraph(createCfg(list.head()));
-		list = list.tail();
-		while (!list.isEmpty()) {
-			Graph new_result = createCfg(list.head());
-			result_graph.attachChildGraph(result_graph.leaves, new_result);
-			result_graph.leaves = new_result.leaves;
+      
+  cfg-matcher-method-internal: r -> java:method-dec |[
+      private static Graph createCfg_inner(IStrategoTerm term) {
+		Graph result_graph = new Graph();
+	  	if (TermUtils.isList(term)) {
+			IStrategoList list = M.list(term);
+			if (list.isEmpty()) {
+				return new Graph();
+			}
+			result_graph.mergeGraph(createCfg_inner(list.head()));
 			list = list.tail();
-		}
-	} else ~else
-  ]| 
+			while (!list.isEmpty()) {
+				Graph new_result = createCfg_inner(list.head());
+				result_graph.attachChildGraph(result_graph.leaves, new_result);
+				result_graph.leaves = new_result.leaves;
+				list = list.tail();
+			}
+		} else ~else
+		return result_graph;
+  	  }
+    ]| 
   where
-    else := <cfg-matcher-switch-internal> r
-             
+    cfg-rules := <filter(?(CFGRule(NoRoot(), _, _)))> r
+  ; else := <cfg-matcher-switch-internal(throw-exception)> cfg-rules
   
-  cfg-matcher-switch-internal: [] -> Block([Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not create CFG node for term '\""), ExpressionName(Id("term"))), StringLiteral("\"'.\""))]))])
-  cfg-matcher-switch-internal: [CFGRule(_, pattern, body)|tail] -> result
+  empty-block: _ -> Block([])
+  throw-exception: _ -> Block([Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not create CFG node for term '\""), ExpressionName(Id("term"))), StringLiteral("\"'.\""))]))])
+  
+  cfg-matcher-switch-internal(make-default): [] -> <make-default>
+  cfg-matcher-switch-internal(make-default): [CFGRule(_, pattern, body)|tail] -> IfElse(condition, then, else)
   where
-    condition := <cfg-pattern-to-condition(|"term", [])> pattern;
-    then := <pattern-to-decls(|"term", [])> (pattern, body);
-    else := <cfg-matcher-switch-internal> tail;
-    result := IfElse(condition, then, else)
+    condition := <cfg-pattern-to-condition(|"term", [])> pattern
+  ; then := <pattern-to-decls(|"term", [])> (pattern, body)
+  ; else := <cfg-matcher-switch-internal(make-default)> tail
+
   
   cond-same: (l, r) -> Eq(l, r)
   cond-equals: (l, r) -> InvokeQExp(l, None(), Id("equals"), [r])
@@ -176,20 +165,16 @@ rules
   
   build-node: var -> java:bstm* |[
   	Graph x = new Graph(getTermNode(~t), ~t);
-  	//Collection<Node> ~x_l = x.leaves();
   ]|
   where 
     x := <to-build-node-name> var
-  //; x_l := <to-build-node-leaves-name> var
   ; t := <to-term-name> var
   refer-node: (alias, var) -> <concat> [<build-node> var, [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-build-node-name> alias)), ExpressionName(Id(<to-build-node-name> var)))]))]]
   rec-node: var -> java:bstm* |[ 
-    Graph ~x = createCfg(~rec);
-    //Collection<Node> ~x_l = x.leaves();
+    Graph ~x = createCfg_inner(~rec);
   ]|
   where
     x := <to-rec-node-name> var
-  //; x_l := <to-rec-node-leaves-name> var
   ; rec  := <to-term-name> var
   refer-rec: (alias, var) -> <concat> [<rec-node> var, [LocVarDeclStm(LocalVarDecl([], <node-set-type>, [VariableDeclInit(VariableDecl(Id(<to-rec-node-name> alias)), ExpressionName(Id(<to-rec-node-name> var)))]))]]
   

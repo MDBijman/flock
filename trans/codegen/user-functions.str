@@ -28,7 +28,7 @@ rules
   to-function-name = append-string(|"_f")
 
   property-function: PropDef(name, _) -> java:method-dec |[
-    public static Lattice ~fun-name(Object o) {
+    public static FlockLattice ~fun-name(Object o) {
       Node node = (Node) o;
       return node.getProperty(~prop-name).lattice;
     }

@@ -12,28 +12,37 @@ tokenize: "!.,(["
 context-free syntax // Type definitions
 	
 	TypeDef.TypeDefParams =
-	<<TypeName>[<{Var ", "}+>] =
+	<<TypeName>[<{Var ", "}+>] <TypeKind> =
 	  <{ConsDef "\n"}+>>
 	
 	TypeDef.TypeDefNoParams =
-	<<TypeName> =
+	<<TypeName> <TypeKind> =
 	  <{ConsDef "\n"}+>>
 	
 	ConsDef.ConsDef = [| [ConsName]([{TypeOrVar ", "}*])]
 	
 	TypeOrVar.TypeOrVarType = Type {prefer}
 	TypeOrVar.TypeOrVarVar = Var
+	
+	TypeKind.WithDependencies = [with dependencies]
+	TypeKind.None = []
 
 context-free syntax // Lattice definitions
 	
 	// TODO: no need for the Var*?
 	LatticeDef.LatticeDefParams =
-	<<TypeName>[<{Var ", "}+>] where
+	<<TypeName>[<{Var ", "}+>] <LatticeKind> where
 	  <LatticePart+>>
 	
 	LatticeDef.LatticeDefNoParams =
-	<<TypeName> where
+	<<TypeName> <LatticeKind> where
 	  <LatticePart+>>
+	
+	LatticeKind.ValueWithDependencies = [is value with dependencies]
+	LatticeKind.Value = [is value]
+	LatticeKind.CollectionWithDependencies = [is collection with dependencies]
+	LatticeKind.Collection = [is collection]
+	LatticeKind.None = []
 	
 	LatticePart.LatticePartType = [type = [Type]]
 	LatticePart.TypedLub = [lub([Var]: [Type], [Var]: [Type]) = [Expr]]
