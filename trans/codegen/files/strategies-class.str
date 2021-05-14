@@ -1,0 +1,63 @@
+module codegen/strategies-class
+
+imports
+
+  codegen/-
+
+  signatures/flock/-
+  signatures/flock/desugar/-
+  signatures/java/types/-
+  signatures/java/classes/-
+  signatures/java/expressions/-
+  signatures/java/literals/-
+  signatures/java/lexical/-
+  signatures/java/names/-
+  signatures/java/interfaces/-
+  signatures/java/statements/-
+  signatures/java/packages/-
+
+strategies
+
+  module-to-strategies-java: Module(name, _, r) -> java:compilation-unit |[
+    package org.spoofax;
+    ~import-dec*:imports
+    public class FlowAnalysisStrategies {
+      ~*inners
+    }
+  ]|
+  with 
+    imports := <all-imports>
+  ; inners := <retain-all(propdef-to-strategy-class)> r 
+  
+  propdef-to-strategy-class: PropDef(name, type) -> classb-dec |[
+    public static class ~class-name extends Strategy {
+       public static ~class-name instance = new ~class-name();
+       
+       @Override
+	   public IStrategoTerm invoke(Context context, IStrategoTerm current) {
+         ITermFactory factory = context.getFactory();
+         CfgNodeId id = new CfgNodeId(((IStrategoInt) current).intValue());
+         Node node = Program.instance.getNode(id);
+         if (node == null) {
+        	Program.printDebug(~error-message + id.getId());
+        	return current;
+         }
+         Program.instance.analysisWithName(~property-name).updateUntilBoundary(Program.instance.graph, node);
+        
+         IStrategoList l = factory.makeList((Collection<? extends IStrategoTerm>) (~typecast
+        	.stream()
+        	.map(n -> n.toTerm())
+       		.collect(Collectors.toSet())));
+
+		 return l;
+       }
+    }
+  ]|
+  where
+    class-name := <concat-strings> ["get_", name, "_0_0"]
+  ; error-message := <to-string-literal> "CfgNode is null with id "
+  ; property-name := <to-string-literal> name
+  ; value := |[ node.getProperty(~property-name).lattice.value() ]|
+  ; typecast := <cast-to-type-value(|value)> type
+  
+  cast-to-type-value(|e): UserTypeParams("MaySet", [TypeOrVarType(UserTypeParams("Name", []))]) -> |[(HashSet<Name>) e]|
