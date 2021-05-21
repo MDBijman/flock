@@ -1,0 +1,16 @@
+module normalize
+
+imports
+
+  analysis
+  signatures/flock/-
+
+strategies
+
+  normalize-module = debug; topdown(try(annotate-prop-rule))
+  
+  annotate-prop-rule: pr@PropRule(name, match, SetLiteral(_), whereClause) -> pr
+  where
+    propType := <get-type> name
+  ; <debug> propType
+  

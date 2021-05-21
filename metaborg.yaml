@@ -6,13 +6,18 @@ dependencies:
   - org.metaborg:org.metaborg.meta.lang.esv:${metaborgVersion}
   - org.metaborg:org.metaborg.meta.lang.template:${metaborgVersion}
   - org.metaborg:lang.java:1.1.0-SNAPSHOT
+  - org.metaborg:statix.lang:${metaborgVersion}
   source:
   - org.metaborg:meta.lib.spoofax:${metaborgVersion}
+  - org.metaborg:statix.runtime:${metaborgVersion}
   - org.metaborg:lang.java:1.1.0-SNAPSHOT
 pardonedLanguages:
 - EditorService
 - Stratego-Sugar
 - SDF
+exports:
+  - language: ATerm
+    directory: src-gen/statix
 language:
   sdf:
     pretty-print: flock

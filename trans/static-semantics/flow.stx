@@ -1,0 +1,118 @@
+module static-semantics/flow
+
+imports
+  static-semantics/common
+  static-semantics/pattern
+  static-semantics/helpers/bool
+  static-semantics/helpers/flow-graph-validity
+  static-semantics/helpers/lists
+
+signature
+
+  sorts
+    CFGRule
+    CFGChain
+    CFGChainElement
+    Root
+
+  constructors
+    CFGRule : Root * Pattern * list(CFGChain) -> CFGRule
+    Chain : CFGChainElement * list(CFGChainElement) -> CFGChain
+    Entry : CFGChainElement
+    Exit : CFGChainElement
+    CFGChainElementStart : CFGChainElement
+    CFGChainElementEnd : CFGChainElement
+    SubCFG : Var -> CFGChainElement
+    Node : Var -> CFGChainElement
+    This : CFGChainElement
+
+    CFGNode : Pattern -> CFGRule
+
+    NoRoot : Root
+    Root : Root
+
+  relations
+    cfgRootPatternNames : -> list(string)
+
+  constraints
+
+    cfgPatternIsConstructor : TYPE * Pattern
+
+    cfgRuleOk : scope * CFGRule
+    cfgRulesOk maps cfgRuleOk(*, list(*))
+
+    rootOk : scope * Root
+
+    cfgChainOk : scope * CFGChain * Pattern * TYPE
+    cfgChainsOk maps cfgChainOk(*, list(*), *, *)
+
+    cfgChainElementOk : scope * CFGChainElement * Pattern * TYPE
+    cfgChainElementsOk maps cfgChainElementOk(*, list(*), *, *)
+
+rules
+
+  cfgPatternIsConstructor(INST(USERTYPE(_, _, _), []), _).
+  cfgPatternIsConstructor(t, _) :-
+    false | error $[A constructor without type parameters must be used as the root of a control flow rule pattern. The type [t] does not provide any such constructors.].
+
+  cfgRuleOk(moduleScope, rule@CFGRule(root, pattern, cfgChains)) :- {ruleScope ruleGraph patternType}
+    new ruleScope,
+    ruleScope -P-> moduleScope,
+    rootOk(ruleScope, root),
+    patternType == typeOfPattern(ruleScope, pattern),
+    !cfgRootPatternNames[patternNames(pattern)] in ruleScope,
+    cfgPatternIsConstructor(patternType, pattern),
+    cfgChainsOk(ruleScope, cfgChains, pattern, patternType),
+    ruleScope -> Variable{ "end" }.//,
+    // FIXME: the rules below are currently too heavy to use in Statix effectively
+    //buildCfgRuleGraph(ruleScope, rule) == ruleGraph,
+    //validateCfgRuleGraph(ruleGraph).
+
+  cfgRuleOk(moduleScope, CFGNode(pattern)) :- {patternType}
+    patternType == typeOfPattern(moduleScope, pattern),
+    cfgPatternIsConstructor(patternType, pattern).
+
+  rootOk(ruleScope, Root()) :-
+    ruleScope -> Variable{ "start" }.
+
+  rootOk(ruleScope, NoRoot()) :-
+    ruleScope -> Variable{ "entry" },
+    ruleScope -> Variable{ "exit" }.
+
+  cfgChainOk(ruleScope, Chain(firstElement, restElements), pattern, patternType) :-
+    cfgChainElementOk(ruleScope, firstElement, pattern, patternType),
+    cfgChainElementsOk(ruleScope, restElements, pattern, patternType).
+
+  cfgChainElementOk(ruleScope, sub@SubCFG(name), _, _) :- {name' varType rootPatternNames}
+    @name.ref := name',
+    @name.type := varType,
+    @sub.ref := name',
+    @sub.type := varType,
+    occurrenceType of Variable{name} in ruleScope |-> [(_, (Variable{name'}, varType))] | error $[The identifier [name] cannot be found in the current rule's scope.],
+    ?cfgRootPatternNames[] in ruleScope == rootPatternNames,
+    stringListContains(rootPatternNames, name) == StxFalse() | error $[The variable [name] refers to the root of the pattern in this rule. Usage will lead to infinite recursion.].
+
+  cfgChainElementOk(ruleScope, e@This(), pattern, patternType) :-
+    @e.ref := pattern,
+    @e.type := patternType.
+
+  cfgChainElementOk(ruleScope, Node(name), _, _) :- {name' varType}
+    @name.ref := name',
+    @name.type := varType,
+    occurrenceType of Variable{name} in ruleScope |-> [(_, (Variable{name'}, varType))] | error $[The identifier [name] cannot be found in the current rule's scope.].
+
+  cfgChainElementOk(ruleScope, e@Entry(), pattern, _) :-
+    @e.ref := pattern,
+    Variable{"entry"} in ruleScope |-> [(_, Variable{_})] | error $[The keyword "entry" is not valid in this rule.].
+
+  cfgChainElementOk(ruleScope, e@Exit(), pattern, _) :-
+    @e.ref := pattern,
+    Variable{"exit"} in ruleScope |-> [(_, Variable{_})] | error $[The keyword "exit" is not valid in this rule.].
+
+  cfgChainElementOk(ruleScope, e@CFGChainElementStart(), pattern, _) :-
+    @e.ref := pattern,
+    Variable{"start"} in ruleScope |-> [(_, Variable{_})] | error $[The keyword "start" is not valid in this rule.].
+
+  cfgChainElementOk(ruleScope, e@CFGChainElementEnd(), pattern, _) :-
+    @e.ref := pattern,
+    Variable{"end"} in ruleScope |-> [(_, Variable{_})] | error $[The keyword "end" is not valid in this rule.].

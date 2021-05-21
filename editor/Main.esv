@@ -4,6 +4,8 @@ imports
 
   Syntax
   CodeGen
+  Analysis
+  Transform
 
 language
 

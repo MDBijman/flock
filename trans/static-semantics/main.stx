@@ -1,0 +1,84 @@
+module static-semantics/main
+
+imports
+  static-semantics/common
+  static-semantics/flow
+  static-semantics/functions
+  static-semantics/property
+  static-semantics/signature
+  static-semantics/type
+
+signature
+
+  sorts
+    ImportExternalSection
+    Module
+    PropDefExternalSection
+    Section
+
+  constructors
+    Module : string * list(Section) -> Module
+
+    ImportExternals : list(StrategoModName) -> ImportExternalSection
+    PropDefExternals : list(PropDef) -> PropDefExternalSection
+
+    Imports : list(StrategoModName) * list(ImportExternalSection) -> Section
+    Signatures : list(Signature) -> Section
+    CFGRules : list(CFGRule) -> Section
+    LatticeDefs : list(LatticeDef) -> Section
+    TypeDefs : list(TypeDef) -> Section
+    PropDefs : list(PropDef) * list(PropDefExternalSection) -> Section
+    PropRules : list(PropRule) -> Section
+    FunDefs : list(FunDef) -> Section
+
+rules
+
+  moduleOk : scope * Module
+  sectionOk : scope * scope * Section
+  sectionsOk maps sectionOk(*, *, list(*))
+
+  importOk : scope * scope * string
+  importsOk maps importOk(*, *, list(*))
+
+  declareModule : scope * scope * string
+
+rules
+
+  moduleOk(projectScope, Module(moduleName, sections)) :- {moduleScope maySetScope mustSetScope}
+    new moduleScope,
+    moduleScope -P-> projectScope,
+    declareModule(projectScope, moduleScope, moduleName),
+    sectionsOk(projectScope, moduleScope, sections).
+
+  sectionOk(projectScope, moduleScope, Imports(modNames, externalModules)) :-
+    importsOk(projectScope, moduleScope, modNames).
+
+  sectionOk(_, moduleScope, Signatures(signatures)) :-
+    signaturesOk(moduleScope, signatures).
+
+  sectionOk(_, moduleScope, CFGRules(cfgRules)) :-
+    cfgRulesOk(moduleScope, cfgRules).
+
+  sectionOk(_, moduleScope, LatticeDefs(latticeDefs)) :-
+    latticeDefsOk(moduleScope, latticeDefs).
+
+  sectionOk(_, moduleScope, TypeDefs(typeDefs)) :-
+    typeDefsOk(moduleScope, typeDefs).
+
+  sectionOk(_, moduleScope, PropDefs(propDefs, externalPropDefs)) :-
+    propDefsOk(moduleScope, propDefs).
+
+  sectionOk(_, moduleScope, PropRules(propRules)) :-
+    propRulesOk(moduleScope, propRules).
+
+  sectionOk(_, moduleScope, FunDefs(funDefs)) :-
+    funDefsOk(moduleScope, funDefs).
+
+  declareModule(projectScope, moduleScope, name) :-
+    projectScope -> Module{name} with occurrenceScope moduleScope,
+    occurrenceScope of Module{name} in projectScope |-> [(_, (Module{name}, moduleScope))] | error $[The module [name] is already defined.].
+
+  importOk(projectScope, moduleScope, moduleName) :- {moduleName' importedModuleScope}
+    @moduleName.ref := moduleName',
+    occurrenceScope of Module{moduleName} in projectScope |-> [(_, (Module{moduleName'}, importedModuleScope))],
+    moduleScope -I-> importedModuleScope.

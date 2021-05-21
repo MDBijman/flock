@@ -27,6 +27,7 @@ strategies
   construct-from(|type): expr -> <construct-from> (type, expr)
   construct-from: (UserTypeParams(name, _), expr) -> java:expr |[ new ~name(~expr) ]|
   construct-from: (Map(_, _), expr) -> java |[ new MapLattice(~expr) ]|
+  construct-from: (Set(_), expr) -> java |[ new SetLattice(~expr) ]|
   construct-from: (name, expr) -> java:expr |[ new ~name(~expr) ]|
   
   to-value-name(|name): Map(_, _) -> <concat-strings> [name] where <debug> (name, "map")
@@ -34,6 +35,7 @@ strategies
   
   type-to-java: UserTypeParams(name, _) -> ClassType(Id(name), None())
   type-to-java: Map(_, _) -> ClassType(Id("MapLattice"), None())
+  type-to-java: Set(_) -> ClassType(Id("SetLattice"), None())
   
   lattice-type-to-superclass: Map(_, _) -> "MapLattice"
   lattice-type-to-superclass: Set(_) -> "SetLattice"

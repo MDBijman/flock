@@ -1,0 +1,410 @@
+module static-semantics/expr
+
+imports
+  static-semantics/common
+  static-semantics/pattern
+  static-semantics/type
+
+signature
+
+  sorts
+    CompPredicate
+    Expr
+    //ExprRef // SDF3 considers this an alias
+    //FunRef // SDF3 considers this an alias
+    Literal
+    MapBinding
+    MapCompExpr
+    MapCompSource
+    MatchArm
+    Ref
+    SetCompExpr
+    SetCompMatchArm
+    SetCompSource
+
+  constructors
+    ExprTerm : ConsName * list(Expr) -> Expr
+    ExprExprRef : Ref -> Expr
+    PropOrAppl : PropName * Var -> Expr
+    ExprTuple : Expr * list(Expr) -> Expr
+    ExprLiteral : Literal -> Expr
+    ExprStart : Expr
+    ExprEnd : Expr
+
+    ExprType : Var -> Expr
+    Appl : Ref * list(Expr) -> Expr
+    If : Expr * Expr * Expr -> Expr
+
+    Eq  : Expr * Expr -> Expr
+    NEq : Expr * Expr -> Expr
+    And : Expr * Expr -> Expr
+    Or  : Expr * Expr -> Expr
+    Not : Expr        -> Expr
+
+    Lt  : Expr * Expr -> Expr
+    Lte : Expr * Expr -> Expr
+    Gt  : Expr * Expr -> Expr
+    Gte : Expr * Expr -> Expr
+
+    Add : Expr * Expr -> Expr
+    Sub : Expr * Expr -> Expr
+    Mul : Expr * Expr -> Expr
+    Div : Expr * Expr -> Expr
+    Mod : Expr * Expr -> Expr
+    Neg : Expr        -> Expr
+
+    Match : Expr * list(MatchArm) -> Expr
+
+    SetLiteral : list(Expr) -> Expr
+    SetComp : Expr * list(SetCompExpr) -> Expr
+    MapLiteral : list(MapBinding) -> Expr
+    MapComp : MapBinding * list(MapCompExpr) -> Expr
+    MapLookup : Expr * Expr -> Expr
+    EmptySetOrMapLiteral : Expr
+
+    SetCompExprSource : SetCompSource -> SetCompExpr
+    SetCompExprPredicate : CompPredicate -> SetCompExpr
+    MapCompExprSource : MapCompSource -> MapCompExpr
+    MapCompExprPredicate : CompPredicate -> MapCompExpr
+    Predicate : Expr -> CompPredicate
+    MatchPredicate : Expr * list(SetCompMatchArm) -> CompPredicate
+    SetSource : Pattern * Expr -> SetCompSource
+    MapSource : Pattern * Pattern * Expr -> MapCompSource
+    MapBinding : Expr * Expr -> MapBinding
+
+    TermIndex : Var -> Expr
+
+    Union        : Expr * Expr -> Expr
+    Difference   : Expr * Expr -> Expr
+    Contains     : Expr * Expr -> Expr
+    Intersection : Expr * Expr -> Expr
+
+    MatchArm : Pattern * Expr -> MatchArm
+    SetCompMatchArmMatchArm : Pattern -> SetCompMatchArm
+
+    IntLiteral : Int -> Literal
+    StringLiteral : String -> Literal
+    TrueLiteral : Literal
+    FalseLiteral : Literal
+
+    QualRef : ModuleName * Var -> Ref
+    Ref : Var -> Ref
+    TypedRef : Var * Type -> Ref
+    Position : Ref -> Expr
+
+	Cast : Expr * Type -> Expr
+	WithOrigin : Expr * list(Expr) -> Expr
+
+    //ExprRef : Ref -> ExprRef
+    TopOf : Type -> Ref
+    BottomOf : Type -> Ref
+
+    LubOf  : Type -> Ref
+    GlbOf  : Type -> Ref
+    LeqOf  : Type -> Ref
+    GeqOf  : Type -> Ref
+    NLeqOf : Type -> Ref
+    FunRef : Ref -> Ref
+
+  constraints
+    typesEquatable : TYPE * TYPE
+    typeListsEquatable maps typesEquatable(list(*), list(*))
+    typesComparable : TYPE * TYPE
+    typeIsNumeric : TYPE
+    typeOfArithmeticTypes : TYPE * TYPE -> TYPE
+    typeOfArithmeticOrConcatTypes : TYPE * TYPE -> TYPE
+    typeAssignableTo : TYPE * TYPE
+    typesAssignableTo maps typeAssignableTo(list(*), list(*))
+    typeImplicitlyConvertibleTo : TYPE * TYPE
+
+    typeOfExpr : scope * scope * Expr -> TYPE
+    typesOfExprs maps typeOfExpr(*, *, list(*)) = list(*)
+    
+    funTypeOf : scope * Ref -> TYPE
+
+    typeOfPropOrAppl : scope * string * string * list((path * (occurrence * TYPE))) -> TYPE
+
+    typeOfMatchArm : scope * scope * MatchArm * TYPE -> TYPE
+    typesOfMatchArms maps typeOfMatchArm(*, *, list(*), *) = list(*)
+
+    setCompExprOk : scope * scope * SetCompExpr
+    setCompExprsOk maps setCompExprOk(*, *, list(*))
+
+    compPredicateOk : scope * scope * CompPredicate
+    
+    assertSetOrMap : TYPE
+
+rules
+
+  typesEquatable(INT(), FLOAT()).
+  typesEquatable(FLOAT(), INT()).
+  typesEquatable(STRING(), NAME()).
+  typesEquatable(NAME(), STRING()).
+  typesEquatable(a, b) :- a == b | error $[The types [a] and [b] are not equatable.].
+
+  typesComparable(INT(), INT()).
+  typesComparable(FLOAT(), FLOAT()).
+  typesComparable(INT(), FLOAT()).
+  typesComparable(FLOAT(), INT()).
+
+  typeOfArithmeticTypes(INT(), INT()) = INT().
+  typeOfArithmeticTypes(FLOAT(), FLOAT()) = FLOAT().
+  typeOfArithmeticTypes(FLOAT(), INT()) = FLOAT().
+  typeOfArithmeticTypes(INT(), FLOAT()) = FLOAT().
+
+  typeOfArithmeticOrConcatTypes(INT(), STRING()) = STRING().
+  typeOfArithmeticOrConcatTypes(STRING(), INT()) = STRING().
+  typeOfArithmeticOrConcatTypes(FLOAT(), STRING()) = STRING().
+  typeOfArithmeticOrConcatTypes(STRING(), FLOAT()) = STRING().
+  typeOfArithmeticOrConcatTypes(STRING(), STRING()) = STRING().
+  typeOfArithmeticOrConcatTypes(NAME(), NAME()) = NAME().
+  typeOfArithmeticOrConcatTypes(a, b) = typeOfArithmeticTypes(a, b).
+
+  typeIsNumeric(INT()).
+  typeIsNumeric(FLOAT()).
+
+  typeAssignableTo(INT(), FLOAT()).
+  typeAssignableTo(NAME(), STRING()).
+  typeAssignableTo(NAME(), INST(USERTYPE("Name", [], _), [])).
+  typeAssignableTo(STRING(), NAME()).
+  typeAssignableTo(STRING(), INST(USERTYPE("Name", [], _), [])).
+  typeAssignableTo(INST(USERTYPE("Name", [], _), []), STRING()).
+  typeAssignableTo(INST(USERTYPE("Name", [], _), []), NAME()).
+  typeAssignableTo(INST(LATTICE("MaySet", _, b, _), _), a) :- typeAssignableTo(b, a).
+  typeAssignableTo(a, INST(LATTICE("MaySet", _, b, _), _)) :- typeAssignableTo(a, b).
+  typeAssignableTo(a, b) :-
+    a == b | error $[The type [a] cannot be assigned to type [b].].
+  
+  typeImplicitlyConvertibleTo(INST(LATTICE("MaySet", _, SET(b), _), _), SET(a)) :- a == b.
+  typeImplicitlyConvertibleTo(a, b) :- a == b | error $[The type [a] cannot be converted to type [b].]. 
+
+  typeOfExpr(ms, s, e@ExprTerm(consName, exprs)) = T@INST(constructorResultType, exTArgs) :- {consName' constructorType constructorParamTypes tName tParams tScope instScope promotedConstructorParamTypes exprTypes}
+    @consName.ref := consName',
+    @e.type := CONSTRUCTOR(T, promotedConstructorParamTypes),
+    occurrenceType of Constructor{consName} in s |-> [(_, (Constructor{consName'}, constructorType))] | error $[Unable to resolve constructor [consName] uniquely.],
+    CONSTRUCTOR(constructorResultType, constructorParamTypes) == constructorType,
+    USERTYPE(tName, tParams, tScope) == constructorResultType,
+    instScope == createInstTypeScope(new, tParams, exTArgs),
+    promotedConstructorParamTypes == promoteTypes(instScope, constructorParamTypes, tName, consName),
+    exprTypes == typesOfExprs(ms, s, exprs),
+    matchTypes(exprTypes, promotedConstructorParamTypes) | error "Analysis of nested expressions failed. Did you specify the correct number of arguments?".
+
+  typeOfExpr(ms, s, e@PropOrAppl(funName, arg)) = T :- {funQueryResult}
+    @e.type := T,
+    occurrenceType of Function{funName} in s |-> funQueryResult,
+    T == typeOfPropOrAppl(s, funName, arg, funQueryResult).
+
+  typeOfExpr(ms, s, e@ExprTuple(first, rest)) = T@TUPLE([firstT | restTs]) :-
+    @e.type := T,
+    firstT == typeOfExpr(ms, s, first),
+    restTs == typesOfExprs(ms, s, rest).
+
+  typeOfExpr(ms, s, e@Appl(fref, args)) = T :- {argTs typeParams paramTs instScope actualArgTs promotedConstructorParamTypes}
+    @e.type := T,
+    FUNCTION(T, typeParams, paramTs) == funTypeOf(s, fref),
+    instScope == createInstTypeScope(new, typeParams, actualArgTs),
+    promotedConstructorParamTypes == promoteTypes(instScope, paramTs, "Function application", "unknown location"),
+    argTs == typesOfExprs(ms, s, args),
+    typesAssignableTo(argTs, promotedConstructorParamTypes) | error "An unexpected number of arguments was provided.".
+
+  typeOfExpr(ms, s, expr@If(c, t, e)) = T :- {cT tT eT}
+    @expr.type := T,
+    matchType(tT, T) | error $[The type [tT] cannot be assigned to type [T].],
+    cT == BOOL() | error $[The condition of the if-statement has type [cT], which is not boolean.],
+    cT == typeOfExpr(ms, s, c),
+    tT == typeOfExpr(ms, s, t),
+    eT == typeOfExpr(ms, s, e),
+    tT == eT | error $[The branches of the if-statement do not have the same type (left: [tT]; right: [eT]).].
+
+  typeOfExpr(ms, s, e@Eq(l, r)) = BOOL() :-
+    @e.type := BOOL(), typesEquatable(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@NEq(l, r)) = BOOL() :-
+    @e.type := BOOL(), typesEquatable(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@And(l, r)) = BOOL() :-
+    @e.type := BOOL(), typeOfExpr(ms, s, l) == BOOL(), typeOfExpr(ms, s, r) == BOOL().
+
+  typeOfExpr(ms, s, e@Or(l, r)) = BOOL() :-
+    @e.type := BOOL(), typeOfExpr(ms, s, l) == BOOL(), typeOfExpr(ms, s, r) == BOOL().
+
+  typeOfExpr(ms, s, n@Not(e)) = BOOL() :-
+    @e.type := BOOL(), typeOfExpr(ms, s, e) == BOOL().
+
+  typeOfExpr(ms, s, e@Lt(l, r)) = BOOL() :-
+    @e.type := BOOL(), typesComparable(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@Lte(l, r)) = BOOL() :-
+    @e.type := BOOL(), typesComparable(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@Gt(l, r)) = BOOL() :-
+    @e.type := BOOL(), typesComparable(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@Gte(l, r)) = BOOL() :-
+    @e.type := BOOL(), typesComparable(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@Add(l, r)) = T :-
+    @e.type := T, T == typeOfArithmeticOrConcatTypes(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@Sub(l, r)) = T :-
+    @e.type := T, T == typeOfArithmeticTypes(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@Mul(l, r)) = T :-
+    @e.type := T, T == typeOfArithmeticTypes(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@Div(l, r)) = T :-
+    @e.type := T, T == typeOfArithmeticTypes(typeOfExpr(ms, s, l), typeOfExpr(ms, s, r)).
+
+  typeOfExpr(ms, s, e@Mod(l, r)) = INT() :-
+    @e.type := INT(), typeOfExpr(ms, s, l) == INT(), typeOfExpr(ms, s, r) == INT().
+
+  typeOfExpr(ms, s, n@Neg(e)) = T :-
+    @n.type := T, T == typeOfExpr(ms, s, e), typeIsNumeric(T).
+
+  typeOfExpr(ms, s, e@Match(scrutinee, arms)) = T :- {scrutineeType armTs}
+    @e.type := T,
+    [T | _] == armTs,
+    scrutineeType == typeOfExpr(ms, s, scrutinee),
+    armTs == typesOfMatchArms(ms, s, arms, scrutineeType),
+    isListSameType(armTs) | error "All arms of a match expression must have the same type.".
+
+  typeOfExpr(ms, s, e@SetLiteral(items)) = T@SET(setType) :-
+    @e.type := T,
+    _ == typesOfExprs(ms, s, items).
+
+  typeOfExpr(ms, s, e@SetComp(result, setCompExprs)) = T@SET(setType) :- {setCompScope}
+    @e.type := T,
+    new setCompScope, setCompScope -P-> s,
+    setCompExprsOk(ms, setCompScope, setCompExprs),
+    T == SET(typeOfExpr(ms, setCompScope, result)). // because this is a set comprehension
+
+  typeOfExpr(ms, s, e@EmptySetOrMapLiteral()) = unknown_t :-
+    @e.type := unknown_t,
+    assertSetOrMap(unknown_t).
+
+  typeOfExpr(ms, s, e@Union(l, r)) = T :- {lT rT}
+    @e.type := T, T == lT,
+    lT == typeOfExpr(ms, s, l),
+    rT == typeOfExpr(ms, s, r),
+    typeImplicitlyConvertibleTo(lT, SET(_)) | error $[LHS of union is not set or convertible to set],
+    typeImplicitlyConvertibleTo(rT, SET(_)) | error $[RHS of union is not set or convertible to set].
+
+  typeOfExpr(ms, s, e@Cast(inner, type)) = T :- {castType exprType}
+    @e.type := T, T == castType,
+    castType == typeOfTypeOrLattice(ms, new, type),
+    exprType == typeOfExpr(ms, s, inner),
+    typeAssignableTo(exprType, castType).
+
+  typeOfExpr(ms, s, e@WithOrigin(inner, origins)) = T :- {innerType}
+    @e.type := T, T == innerType,
+    innerType == typeOfExpr(ms, s, inner).
+
+  typeOfExpr(ms, _, e@ExprLiteral(l@IntLiteral(v))) = INT() :-
+    @e.type := INT(), @l.type := INT(), @v.type := INT().
+  typeOfExpr(ms, _, e@ExprLiteral(l@StringLiteral(v))) = STRING() :-
+    @e.type := STRING(), @l.type := STRING(), @v.type := STRING().
+  typeOfExpr(ms, _, e@ExprLiteral(l@TrueLiteral())) = BOOL() :-
+    @e.type := BOOL(), @l.type := BOOL().
+  typeOfExpr(ms, _, e@ExprLiteral(l@FalseLiteral())) = BOOL() :-
+    @e.type := BOOL(), @l.type := BOOL().
+
+  typeOfExpr(ms, s, e@ExprExprRef(r@Ref(name))) = T :- {name'}
+    @name.ref := name',
+    @e.type := T, @r.type := T, @name.type := T,
+    occurrenceType of Variable{name} in s |-> [(_, (Variable{name'}, T))] | error $[The variable [name] could not be resolved uniquely.].
+
+  typeOfExpr(ms, s, e@ExprExprRef(r@TypedRef(name, type))) = T :- {name'}
+    @name.ref := name',
+    @e.type := T, @r.type := T, @name.type := T,
+    T == typeOfType(ms, s, type),
+    occurrenceType of Variable{name} in s |-> [(_, (Variable{name'}, T))] | error $[The variable [name] could not be resolved uniquely.].
+    
+  typeOfExpr(ms, s, e@ExprExprRef(t@TopOf(lattice))) = T :-
+    @e.type := T, @t.type := T,
+    INST(LATTICE(_, _, T, _), _) == typeOfLattice(s, s, lattice).
+    
+  typeOfExpr(ms, s, e@ExprExprRef(t@BottomOf(lattice))) = T :-
+    @e.type := T, @t.type := T,
+    INST(LATTICE(_, _, T, _), _) == typeOfType(s, s, lattice).
+
+  typeOfExpr(ms, _, e) = UNKNOWN_T :-
+    try { false } | warning $[Type checking of expression [e] has not been implemented yet.].
+    
+  funTypeOf(s, Ref(funName)) = T :- {funName'}
+    @funName.ref := funName', @funName.type := T,
+    occurrenceType of Function{funName} in s |-> [(_, (Function{funName'}, T))] | error $[Could not resolve function [funName] uniquely.].
+    
+  funTypeOf(s, e@LubOf(lattice)) = T :- {latticeType}
+    @e.type := T,
+    latticeType@INST(LATTICE(_, _, _, _), _) == typeOfLattice(s, s, lattice),
+    T == FUNCTION(latticeType, [], [latticeType, latticeType]).
+    
+  funTypeOf(s, e@GlbOf(lattice)) = T :- {latticeType}
+    @e.type := T,
+    latticeType@INST(LATTICE(_, _, _, _), _) == typeOfLattice(s, s, lattice),
+    T == FUNCTION(latticeType, [], [latticeType, latticeType]).
+    
+  funTypeOf(s, e@LeqOf(lattice)) = T :- {latticeType}
+    @e.type := T,
+    latticeType@INST(LATTICE(_, _, _, _), _) == typeOfLattice(s, s, lattice),
+    T == FUNCTION(latticeType, [], [latticeType, latticeType]).
+    
+  funTypeOf(s, e@GeqOf(lattice)) = T :- {latticeType}
+    @e.type := T,
+    latticeType@INST(LATTICE(_, _, _, _), _) == typeOfLattice(s, s, lattice),
+    T == FUNCTION(latticeType, [], [latticeType, latticeType]).
+
+  funTypeOf(s, e@NLeqOf(lattice)) = T :- {latticeType}
+    @e.type := T,
+    latticeType@INST(LATTICE(_, _, _, _), _) == typeOfLattice(s, s, lattice),
+    T == FUNCTION(latticeType, [], [latticeType, latticeType]).
+
+  typeOfPropOrAppl(s, funName, argName, [(_, (Function{funName'}, funT))]) = returnT :- {argName' argT typeParams paramTs instScope actualArgTs promotedConstructorParamTypes}
+    @funName.ref := funName',
+    @funName.type := funT,
+    @argName.ref := argName',
+    @argName.type := argT,
+    funT == FUNCTION(returnT, typeParams, paramTs),
+    instScope == createInstTypeScope(new, typeParams, actualArgTs),
+    promotedConstructorParamTypes == promoteTypes(instScope, paramTs, "Function application", "unknown location"),
+    occurrenceType of Variable{argName} in s |-> [(_, (Variable{argName'}, argT))] | error $[The variable [argName] could not be resolved uniquely.],
+    typesAssignableTo([argT], promotedConstructorParamTypes).
+
+  typeOfPropOrAppl(s, propName, argName, _) = lattice :- {propName' propT argName' argT instScope lName lTParams lType lScope lTArgs}
+    @propName.ref := propName',
+    @propName.type := propT,
+    @argName.ref := argName',
+    @argName.type := argT,
+    occurrenceType of Property{propName} in s |-> [(_, (Property{propName'}, propT@PROPERTY(lattice)))] | error $[The identifier [propName] could not be resolved to a function or property uniquely.],
+    INST(LATTICE(lName, lTParams, lType, lScope), lTArgs) == lattice,
+    instScope == createInstTypeScope(lScope, lTParams, lTArgs),
+   // promotedLType == promoteType(instScope, lType, lName, propName),
+    occurrenceType of Variable{argName} in s |-> [(_, (Variable{argName'}, argT))] | error $[The variable [argName] could not be resolved uniquely.],
+    typeAssignableTo(argT, lattice).
+
+  typeOfMatchArm(ms, s, m@MatchArm(pattern, expr), scrutineeType) = T :- {armScope}
+    @m.type := T,
+    new armScope,
+    armScope -P-> s,
+    scrutineeType == typeOfPattern(armScope, pattern),
+    T == typeOfExpr(ms, armScope, expr).
+
+  setCompExprOk(ms, s, SetCompExprSource(SetSource(pattern, expr))) :- {exprT setT}
+    exprT == typeOfExpr(ms, s, expr),
+    // because this is a source for a set comprehension
+    typeImplicitlyConvertibleTo(exprT, SET(setT)),
+    typeOfPattern(s, pattern) == setT.
+
+  setCompExprOk(ms, s, SetCompExprPredicate(predicate)) :- compPredicateOk(ms, s, predicate).
+
+  compPredicateOk(ms, s, Predicate(expr)) :-
+    typeOfExpr(ms, s, expr) == BOOL().
+
+  compPredicateOk(ms, s, MatchPredicate(expr, matchArms)) :- {exprT}
+    exprT == typeOfExpr(ms, s, expr),
+    try { false } | warning "Match predicates are not yet typechecked.".
+    
+  assertSetOrMap(SET(_)).
+  assertSetOrMap(MAP(_, _)).
+  assertSetOrMap(x) :-
+    false | error $[The expected type is [x], which is not a set or map.].

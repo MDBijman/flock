@@ -1,0 +1,79 @@
+module static-semantics/common
+
+signature
+
+  sorts
+    ID = string
+    ConsName = string
+    ModuleName = string
+    PropName = string
+    StrategoModName = string
+    TypeName = string
+    Var = string
+
+    Int = string
+    String = string
+
+  sorts
+    TYPE
+
+  constructors
+    NAME : TYPE
+    TERM : TYPE
+    INDEX : TYPE
+    INT : TYPE
+    STRING : TYPE
+    FLOAT : TYPE
+    BOOL : TYPE
+    TUPLE : list(TYPE) -> TYPE
+    LIST : TYPE -> TYPE
+    MAP : TYPE * TYPE -> TYPE
+    SET : TYPE -> TYPE
+
+    USERTYPE : ID * list(string) * scope -> TYPE
+    LATTICE : ID * list(string) * TYPE * scope -> TYPE
+    CONSTRUCTOR : TYPE * list(TYPE) -> TYPE
+    FUNCTION : TYPE * list(ID) * list(TYPE) -> TYPE
+    PROPERTY : TYPE -> TYPE
+    TVAR : ID -> TYPE
+    INST : TYPE * list(TYPE) -> TYPE
+
+    OCCURRENCE : TYPE
+
+  namespaces
+    Variable : ID
+    Module : ID
+    Type : ID
+    Lattice : ID
+    Constructor : ID
+    Function : ID
+    Property : ID
+    TVariable : ID
+
+    BASE_TYPE : // no parameters
+    UNIQUE_PART : ID
+
+  name-resolution
+    labels P I
+    resolve Variable             filter P* I* min $ < P, $ < I, P < I
+    resolve Module               filter P* I? min $ < P, $ < I, P < I
+    resolve Type                 filter P* I* min $ < P, $ < I, P < I
+    resolve Lattice              filter P* I* min $ < P, $ < I, P < I
+    resolve Constructor          filter P* I* min $ < P, $ < I, P < I
+    resolve Function             filter P* I* min $ < P, $ < I, P < I
+    resolve Property             filter P* I* min $ < P, $ < I, P < I
+    resolve TVariable            filter I*    min $ < I
+    resolve BASE_TYPE            filter I*    min $ < I
+    resolve UNIQUE_PART
+
+  relations
+    occurrenceScope : occurrence -> scope
+    occurrenceType : occurrence -> TYPE
+    occurrenceOrthonym : occurrence -> string
+
+  constraints
+    determineOccurrenceOrthonym : list((path * (occurrence * string))) * string -> string
+
+rules
+  determineOccurrenceOrthonym([(_, (_, orthonym))], _) = orthonym.
+  determineOccurrenceOrthonym(_, name) = name.

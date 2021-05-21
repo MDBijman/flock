@@ -2,9 +2,10 @@ module flock
 
 imports
   desugar
+  analysis
+  normalize
   pp
-  pp/metaborg-java-pp
-  pp/metaborg-java-parenthesize
+
   libstratego-gpp
   codegen/files/analysis-class
   codegen/files/cfg-builder-class
@@ -35,42 +36,36 @@ rules // Debugging
     (node, _, _, path, project-path) -> (filename, result)
     with
       filename := <guarantee-extension(|"java")> path
-    ; result   := <flo-to-analysis-java; java-ast-to-code> node
+    ; result   := <flo-to-analysis-java; pp-java-string> node
 
   debug-show-props-java:
     (node, _, _, path, project-path) -> (filename, result)
     with
       filename := <guarantee-extension(|"props.java")> path
-    ; result   := <flo-to-props-java; java-ast-to-code> node  
+    ; result   := <flo-to-props-java; pp-java-string> node  
 
   debug-show-strategies-java:
     (node, _, _, path, project-path) -> (filename, result)
     with
       filename := <guarantee-extension(|"strategies.java")> path
-    ; result   := <flo-to-strategies-java; java-ast-to-code> node  
+    ; result   := <flo-to-strategies-java; pp-java-string> node  
 
   debug-show-cfggraph-java:
     (node, _, _, path, project-path) -> (filename, result)
     with
       filename := <concat-strings> [<dirname> path, "/", "CfgGraph.java"]
-    ; result   := <flo-to-cfggraph-java; java-ast-to-code> node
+    ; result   := <flo-to-cfggraph-java; pp-java-string> node
+
+  debug-show-normalized-java:
+    (selected, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <guarantee-extension(|"normalized.flock")> path
+    ; result   := <normalize-module; pp-flock-string> selected
 
 rules
 
-  java-ast-to-code =
-    parenthesize-metaborg-java
-    ; prettyprint-metaborg-java-start-symbols
-    ; !V([], <id>)
-    ; box2text-string(|120)
-
-rules
-
-  flo-to-analysis-java = desugar-all; module-to-analysis-java
-
-  flo-to-props-java = desugar-all; module-to-props-java
-
-  flo-to-cfggraph-java = desugar-all; module-to-cfggraph-java
-
+  flo-to-analysis-java   = desugar-all; module-to-analysis-java
+  flo-to-props-java      = desugar-all; module-to-props-java
+  flo-to-cfggraph-java   = desugar-all; module-to-cfggraph-java
   flo-to-strategies-java = desugar-all; module-to-strategies-java
-    
 

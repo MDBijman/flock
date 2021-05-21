@@ -7,7 +7,9 @@ imports
   libspoofax/editor/refactoring/-
   pp/flock-parenthesize
   pp/flock-pp
-
+  pp/metaborg-java-pp
+  pp/metaborg-java-parenthesize
+  
 rules
 
   editor-format:
@@ -16,6 +18,14 @@ rules
       ext      := <get-extension> path
     ; filename := <guarantee-extension(|$[pp.[ext]])> path
     ; result   := <pp-debug> node
+
+rules
+
+  pp-java-string =
+    parenthesize-metaborg-java
+    ; prettyprint-metaborg-java-start-symbols
+    ; !V([], <id>)
+    ; box2text-string(|120)
 
 rules
   

@@ -83,6 +83,9 @@ rules
   transform-expr(|bindings): TypedRef(name, Name()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
   where
     x := <to-term-name> name
+  transform-expr(|bindings): TypedRef(name, String()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
+  where
+    x := <to-term-name> name
   transform-expr(|bindings): Match(expr, arms) -><fail> with <debug> "Match must not be nested expression"
    
   transform-expr(|bindings): NEq(l, r)    -> Not(InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r]))
