@@ -21,8 +21,8 @@ context-free syntax // Type definitions
 	
 	ConsDef.ConsDef = [| [ConsName]([{TypeOrVar ", "}*])]
 	
-	TypeOrVar.TypeOrVarType = Type {prefer}
-	TypeOrVar.TypeOrVarVar = Var
+	TypeOrVar = Type {prefer}
+	TypeOrVar.TypeVar = Var
 	
 	TypeKind.WithDependencies = [with dependencies]
 	TypeKind.None = []
@@ -32,11 +32,11 @@ context-free syntax // Lattice definitions
 	// TODO: no need for the Var*?
 	LatticeDef.LatticeDefParams =
 	<<TypeName>[<{Var ", "}+>] <LatticeKind> where
-	  <LatticePart+>>
+	  <{LatticePart "\n"}+>>
 	
 	LatticeDef.LatticeDefNoParams =
 	<<TypeName> <LatticeKind> where
-	  <LatticePart+>>
+	  <{LatticePart "\n"}+>>
 	
 	LatticeKind.ValueWithDependencies = [is value with dependencies]
 	LatticeKind.Value = [is value]
@@ -45,14 +45,16 @@ context-free syntax // Lattice definitions
 	LatticeKind.None = []
 	
 	LatticePart.LatticePartType = [type = [Type]]
-	LatticePart.TypedLub = [lub([Var]: [Type], [Var]: [Type]) = [Expr]]
-	LatticePart.Lub = [lub([Var], [Var]) = [Expr]]
+	LatticePart.Lub = [lub([Param], [Param]) = [Expr]]
 	LatticePart.Glb = [glb([Var], [Var]) = [Expr]]
 	LatticePart.Leq = [leq([Var], [Var]) = [Expr]]
 	LatticePart.Geq = [geq([Var], [Var]) = [Expr]]
 	LatticePart.NLeq = [nleq([Var], [Var]) = [Expr]]
 	LatticePart.Top = [top = [Expr]]
 	LatticePart.Bottom = [bottom = [Expr]]
+
+    Param.Param = Var
+    Param.TypedParam = [[Var]: [Type]]
 
 context-free syntax // Type expressions
 	

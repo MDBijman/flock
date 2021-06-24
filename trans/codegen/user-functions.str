@@ -58,7 +58,7 @@ rules
         , Block([Return(<transform-expr(|<get-bindings> params)> expr)])
         )
   
-  transform-param: Arg(name, _) -> FormalParam([], ClassType(Id("Object"), None()), VariableDecl(Id(<to-term-name> name)))
+  transform-param: Arg(name, _) -> FormalParam([], ClassType(Id("Object"), None()), VariableDecl(Id(name)))
   
   transform-params: [] -> NoParams()
   transform-params: [h] -> SingleParam(<transform-param> h)

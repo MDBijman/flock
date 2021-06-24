@@ -28,6 +28,7 @@ signature
     TUPLE : list(TYPE) -> TYPE
     LIST : TYPE -> TYPE
     MAP : TYPE * TYPE -> TYPE
+    BINDING : TYPE * TYPE -> TYPE
     SET : TYPE -> TYPE
 
     USERTYPE : ID * list(string) * scope -> TYPE

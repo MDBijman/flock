@@ -8,7 +8,7 @@ flock/Type
 
 context-free syntax
 
-FunDef.FunDefParams = <<Var>[<{Var ", "}+>](<{FunArg ", "}*>) = <Expr>>
-FunDef.FunDefNoParams = <<Var>(<{FunArg ", "}*>) = <Expr>>
-
-FunArg.Arg = [[Var]: [TypeOrVar]]
+	FunDef.FunDefParams = <<Var>[<{Var ", "}+>](<{FunArg ", "}*>) = <Expr>>
+	FunDef.FunDefNoParams = <<Var>(<{FunArg ", "}*>) = <Expr>>
+	
+	FunArg.Arg = [[Var]: [TypeOrVar]]

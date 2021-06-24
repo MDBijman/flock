@@ -60,7 +60,7 @@ rules
   node-type-name = !"Node"
   node-type-id = !Id(<node-type-name>)
   node-type = !ClassType(<node-type-id>, None())
-  name-to-node: name -> [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-term-name> name)), ExpressionName(Id("node")))]))]
+  name-to-node: name -> [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(name)), ExpressionName(Id("node")))]))]
   
   where-to-code: NoWhereClause() -> []
   where-to-code: WhereClause(bindings) -> <map(binding-to-code); concat> bindings
@@ -68,21 +68,19 @@ rules
 
   binding-to-code: t@TypedBinding(var, type, expr) -> [
       stmt*,
-      java:bstm |[ ~java-type ~name = ~result-expr; ]|
+      java:bstm |[ ~java-type ~var = ~result-expr; ]|
     ]
     where 
       <requires-statements> expr
     with
       (result-name, stmt*) := <expr-to-stmts> expr
-    ; java-type := <type-to-java> type
-    ; name := <to-term-name> var
-    ; result-expr := <construct-from(|type)> result-name
+    ; java-type := <type-to-java-type> type
+    ; result-expr := <simple-cast(|type)> result-name
 
     
-  binding-to-code: TypedBinding(var, type, expr) -> [java:bstm |[ ~java-type ~name = ~java-expr; ]|]
+  binding-to-code: TypedBinding(var, type, expr) -> [java:bstm |[ ~java-type ~var = ~java-expr; ]|]
     with
-      java-type := <type-to-java> type
-    ; name := <to-term-name> var
+      java-type := <type-to-java-type> type
     ; java-expr := <transform-expr; simple-cast(|type)> expr
   
   transfer-instances-class: r -> [ClassDeclaration(

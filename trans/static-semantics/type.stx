@@ -9,12 +9,14 @@ signature
   sorts
     ConsDef
     LatticeDef
+    LatticeKind
     LatticePart
     //SimpleType = Type // SDF3 considers this an alias
     Type
     TypeDef
     TypeOrVar
     TypeKind
+    Param
 
   constructors
     TypeDefParams : TypeName * list(Var) * TypeKind * list(ConsDef) -> TypeDef
@@ -22,14 +24,19 @@ signature
 
     ConsDef : ConsName * list(TypeOrVar) -> ConsDef
 
-    TypeOrVarType : Type -> TypeOrVar
-    TypeOrVarVar : Var -> TypeOrVar
+    TypeVar: Var -> Type
+    //TypeOrVarVar : Var -> TypeOrVar
 
-    LatticeDefParams : TypeName * list(Var) * list(LatticePart) -> LatticeDef
-    LatticeDefNoParams : TypeName * list(LatticePart) -> LatticeDef
+    LatticeDefParams : TypeName * list(Var) * LatticeKind * list(LatticePart) -> LatticeDef
+    LatticeDefNoParams : TypeName * LatticeKind * list(LatticePart) -> LatticeDef
+
+    ValueWithoutDependencies   : LatticeKind
+    ValueWithDependencies      : LatticeKind
+    LatticeWithoutDependencies : LatticeKind
+    LatticeWithDependencies    : LatticeKind
 
     LatticePartType : Type -> LatticePart
-    Lub  : Var * Var * Expr -> LatticePart
+    Lub  : Param * Param * Expr -> LatticePart
     Glb  : Var * Var * Expr -> LatticePart
     Leq  : Var * Var * Expr -> LatticePart
     Geq  : Var * Var * Expr -> LatticePart
@@ -45,6 +52,9 @@ signature
     Float : Type
     Bool : Type
     Origin : Type
+    
+    Param : Var -> Param
+    TypedParam : Var * Type -> Param
 
     UserTypeNoParams : TypeName -> Type
     UserTypeParams : TypeName * list(TypeOrVar) -> Type
@@ -113,7 +123,15 @@ signature
 
     typeOfTypeOrLattice : scope * scope * Type -> TYPE
     
+    typeOfTypeExpr : scope * scope * Type -> TYPE
+    
+    typeOfParam : scope * scope * scope * Param -> TYPE
+    
+    latticeValueType : TYPE -> TYPE
+    
 rules
+
+  latticeValueType(INST(LATTICE(_, _, ty, _), _)) = ty.
 
   createInstTypeScope(parent, names, types) = inst :- 
     new inst,
@@ -184,11 +202,11 @@ rules
   mandatoryLatticePartSpecified(latticeScope, latticeName, latticePartDescription) :-
     UNIQUE_PART{latticePartDescription} in latticeScope |-> [_|_] | error $[The lattice part [latticePartDescription] is not specified in lattice [latticeName].].
 
-  latticeDefOk(moduleScope, ldef@LatticeDefNoParams(latticeName, latticeParts)) :- {latticeDefType}
+  latticeDefOk(moduleScope, ldef@LatticeDefNoParams(latticeName, kind, latticeParts)) :- {latticeDefType}
     @ldef.type := latticeDefType,
     latticeDefType == typeOfLatticeDef(moduleScope, latticeName, [], latticeParts).
 
-  latticeDefOk(moduleScope, ldef@LatticeDefParams(latticeName, params, latticeParts)) :- {latticeDefType}
+  latticeDefOk(moduleScope, ldef@LatticeDefParams(latticeName, params, kind, latticeParts)) :- {latticeDefType}
     @ldef.type := latticeDefType,
     latticeDefType == typeOfLatticeDef(moduleScope, latticeName, params, latticeParts).
 
@@ -206,7 +224,26 @@ rules
     latticeType == typeOfType(moduleScope, latticeScope, t),
     latticePartUnique(latticeScope, "type").
 
-  latticePartOk(moduleScope, latticeScope, latticeType, Lub(a, b, e)) :- {lubScope}
+  latticePartOk(moduleScope, latticeScope, latticeType, Lub(p1, p2, e)) :- {lubScope}
+    new lubScope,
+    lubScope -P-> moduleScope,
+    latticeType == typeOfParam(moduleScope, latticeScope, lubScope, p1),
+    latticeType == typeOfParam(moduleScope, latticeScope, lubScope, p2),
+    typeAssignableTo(typeOfExpr(moduleScope, lubScope, e), latticeType),
+    latticePartUnique(latticeScope, "lub").
+
+  typeOfParam(moduleScope, latticeScope, methodScope, TypedParam(n, t)) = T :-
+    @n.ref := n,
+    @n.type := T,
+    methodScope -> Variable{n} with occurrenceType T,
+    T == typeOfTypeOrLattice(moduleScope, latticeScope, t).
+
+  typeOfParam(moduleScope, latticeScope, methodScope, Param(n)) = T :-
+    @n.ref := n,
+    @n.type := T,
+    methodScope -> Variable{n} with occurrenceType T.
+
+  latticePartOk(moduleScope, latticeScope, latticeType, Lub(Param(a), Param(b), e)) :- {lubScope}
     @a.ref := a, @a.type := latticeType, @b.ref := b, @b.type := latticeType,
     new lubScope,
     lubScope -P-> moduleScope,
@@ -253,7 +290,7 @@ rules
 
   latticePartOk(moduleScope, latticeScope, latticeType, Top(top)) :-
     latticePartUnique(latticeScope, "top"),
-    typeOfExpr(moduleScope, moduleScope, top) == latticeType.
+    typeAssignableTo(typeOfExpr(moduleScope, moduleScope, top), latticeType).
 
   latticePartOk(moduleScope, latticeScope, latticeType, Bottom(bottom)) :-
     latticePartUnique(latticeScope, "bottom"),
@@ -302,6 +339,14 @@ rules
   typeOfLattice(moduleScope, latticeScope, e@UserTypeParams(name, params)) = result :-
     @e.type := result,
     result == typeOfLatticeUserType(moduleScope, latticeScope, name, params).
+
+  typeOfLattice(moduleScope, latticeScope, e@Map(key, value)) = result :- {kT vT Xs lName' tLattice lName instTScope innerType}
+    @e.type := result,
+    occurrenceType of Lattice{"Map"} in moduleScope |-> [(_, (Lattice{lName'}, tLattice@LATTICE(_, Xs, _, _)))] | error $[The lattice Map could not be resolved uniquely.],
+    kT == typeOfTypeOrVar(moduleScope, latticeScope, key),
+    vT == typeOfLattice(moduleScope, latticeScope, value),
+    instTScope == createInstTypeScope(latticeScope, Xs, [kT, vT]),
+    result == promoteType(instTScope, INST(tLattice, [kT, vT]), "Map", "Map").
 
   typeOfLattice(_, _, t) = UNKNOWN_T :-
     false | error $[The expression [t] is not a valid reference to a lattice.].
@@ -361,6 +406,7 @@ rules
     TVariable{param} in typeScope |-> [(_, _)] | error $[The type parameter [param] is declared more than once.].
   
   typeOfTypeOrLattice(moduleScope, typeScope, s@Set(_)) = typeOfType(moduleScope, typeScope, s).
+  typeOfTypeOrLattice(moduleScope, typeScope, m@Map(_, _)) = typeOfType(moduleScope, typeScope, m).
 
   typeOfTypeOrLattice(moduleScope, typeLatticeScope, UserTypeNoParams(name)) = typeOfTypeOrLattice(moduleScope, typeLatticeScope, UserTypeParams(name, [])).
   typeOfTypeOrLattice(moduleScope, typeLatticeScope, UserTypeParams(name, params)) = result :- {latticeOrUserType}
@@ -385,6 +431,20 @@ rules
   typeOrLattice(Lattice{n}, n).
   typeOrLattice(Type{n}, n).
   
-  
+  typeOfTypeExpr(moduleScope, typeScope, s@Set(_)) = typeOfType(moduleScope, typeScope, s).
+  typeOfTypeExpr(moduleScope, typeScope, m@Map(_, _)) = typeOfType(moduleScope, typeScope, m).
+  typeOfTypeExpr(moduleScope, typeScope, UserTypeNoParams(name)) = typeOfTypeOrLattice(moduleScope, typeLatticeScope, UserTypeParams(name, [])).
+  typeOfTypeExpr(moduleScope, typeScope, UserTypeParams(name, params)) = result :- {latticeOrUserType}
+	query occurrenceType
+	  filter P* I* and { dcl :- typeOrLattice(dcl, name) } 
+	  in moduleScope |-> [(_, (_, latticeOrUserType))] | error $[Cannot uniquely resolve type/lattice],
+	result == processTypeOrLattice(moduleScope, typeScope, name, params, latticeOrUserType).
+  typeOfTypeExpr(moduleScope, typeScope, tv@TypeVar(name)) = resultType :- {name'}
+    @name.ref := name',
+    @name.type := resultType,
+    @tv.ref := name',
+    @tv.type := resultType,
+    resultType == TVAR(name),
+    TVariable{name} in typeScope |-> [(_, TVariable{name'})] | error $[The type variable [name] could not be resolved uniquely.].
   
     

@@ -31,33 +31,42 @@ strategies
   
   propdef-to-strategy-class: PropDef(name, type) -> classb-dec |[
     public static class ~class-name extends Strategy {
-       public static ~class-name instance = new ~class-name();
+      public static ~class-name instance = new ~class-name();
        
-       @Override
-	   public IStrategoTerm invoke(Context context, IStrategoTerm current) {
-         ITermFactory factory = context.getFactory();
-         CfgNodeId id = new CfgNodeId(((IStrategoInt) current).intValue());
-         Node node = Program.instance.getNode(id);
-         if (node == null) {
-        	Program.printDebug(~error-message + id.getId());
-        	return current;
-         }
-         Program.instance.analysisWithName(~property-name).updateUntilBoundary(Program.instance.graph, node);
+      @Override
+	  public IStrategoTerm invoke(Context context, IStrategoTerm current) {
+        ITermFactory factory = context.getFactory();
+        CfgNodeId id = new CfgNodeId(((IStrategoInt) current).intValue());
+        Node node = Flock.instance.getNode(id);
+        if (node == null) {
+          Flock.printDebug(~error-message + id.getId());
+          return current;
+        }
+        Flock.instance.analysisWithName(~property-name).updateUntilBoundary(Flock.instance.graph, node);
         
-         IStrategoList l = factory.makeList((Collection<? extends IStrategoTerm>) (~typecast
-        	.stream()
-        	.map(n -> n.toTerm())
-       		.collect(Collectors.toSet())));
+		~result-stmt
 
-		 return l;
-       }
+		return result;
+      }
     }
   ]|
-  where
+  with
     class-name := <concat-strings> ["get_", name, "_0_0"]
   ; error-message := <to-string-literal> "CfgNode is null with id "
   ; property-name := <to-string-literal> name
-  ; value := |[ node.getProperty(~property-name).lattice.value() ]|
-  ; typecast := <cast-to-type-value(|value)> type
+  ; result-stmt := <type-to-strategy-result(|property-name)> type
   
-  cast-to-type-value(|e): UserTypeParams("MaySet", [TypeOrVarType(UserTypeParams("Name", []))]) -> |[(HashSet<Name>) e]|
+  type-to-strategy-result(|property-name): t@UserTypeParams("MaySet", [p]) -> java:bstm |[
+	IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
+		.stream()
+		.map(n -> Helpers.toTerm(n))
+		.collect(Collectors.toList()));
+  ]|
+  
+  type-to-strategy-result(|property-name): UserTypeParams(name, []) -> java:bstm |[
+     IStrategoTerm result = ((FlockValue) node.getProperty(~property-name).lattice.value()).toTerm(); 
+  ]|
+  
+  
+  
+  

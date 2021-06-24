@@ -117,7 +117,7 @@ rules
     result := <concat> [isappl, typematch, argmatch]
   
   var-equals-or-ignore(|chain, rootterm, var): [] -> []
-  var-equals-or-ignore(|chain, rootterm, var): [var|_] -> [InvokeQExp(<chain-to-expression(|rootterm)> chain, None(), Id("equals"), [ExpressionName(Id(<to-term-name> var))])]
+  var-equals-or-ignore(|chain, rootterm, var): [var|_] -> [InvokeQExp(<chain-to-expression(|rootterm)> chain, None(), Id("equals"), [ExpressionName(Id(var))])]
   var-equals-or-ignore(|chain, rootterm, var): [_|t] -> <var-equals-or-ignore(|chain, rootterm, var)> t
   
   
@@ -143,7 +143,7 @@ rules
   pattern-to-decls-internal(|chain, rootterm, bindings): PatternTuple(head, tail) -> <chainmap(pattern-to-decls-internal|chain, rootterm, bindings)> [head|tail]
   pattern-to-decls-internal(|chain, rootterm, bindings): PatternVar(var) -> <var-set-or-ignore(|chain, rootterm, var)> bindings
   
-  var-set-or-ignore(|chain, rootterm, var): [] -> [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [VariableDeclInit(VariableDecl(Id(<to-term-name> var)), <chain-to-expression(|rootterm)> chain)]))]
+  var-set-or-ignore(|chain, rootterm, var): [] -> [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [VariableDeclInit(VariableDecl(Id(var)), <chain-to-expression(|rootterm)> chain)]))]
   var-set-or-ignore(|chain, rootterm, var): [var|_] -> []
   var-set-or-ignore(|chain, rootterm, var): [_|t] -> <var-set-or-ignore(|chain, rootterm, var)> t
   
@@ -164,18 +164,16 @@ rules
   pattern-to-subgraphs-internal(|aliases): CFGChainElementEnd() -> []
   
   build-node: var -> java:bstm* |[
-  	Graph x = new Graph(getTermNode(~t), ~t);
+  	Graph x = new Graph(getTermNode(~var), ~var);
   ]|
   where 
     x := <to-build-node-name> var
-  ; t := <to-term-name> var
   refer-node: (alias, var) -> <concat> [<build-node> var, [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-build-node-name> alias)), ExpressionName(Id(<to-build-node-name> var)))]))]]
   rec-node: var -> java:bstm* |[ 
-    Graph ~x = createCfg_inner(~rec);
+    Graph ~x = createCfg_inner(~var);
   ]|
   where
     x := <to-rec-node-name> var
-  ; rec  := <to-term-name> var
   refer-rec: (alias, var) -> <concat> [<rec-node> var, [LocVarDeclStm(LocalVarDecl([], <node-set-type>, [VariableDeclInit(VariableDecl(Id(<to-rec-node-name> alias)), ExpressionName(Id(<to-rec-node-name> var)))]))]]
   
   // Gather aliases in pattern match, these map to the same underlying stratego term

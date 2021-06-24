@@ -30,7 +30,7 @@ rules
   initializeProjectScope(projectScope) :- {maySetScope mustSetScope mapLatticeScope nameScope}
     projectScope -> Lattice{"MaySet"} with occurrenceType LATTICE("MaySet", ["t"], SET(TVAR("t")), maySetScope),
     projectScope -> Lattice{"MustSet"} with occurrenceType LATTICE("MustSet",["t"], SET(TVAR("t")), mustSetScope),
-    projectScope -> Lattice{"Map"} with occurrenceType LATTICE("Map", ["k", "v"], MAP(TVAR("k"), TVAR("v")), mapLatticeScope),
+    projectScope -> Lattice{"SimpleMap"} with occurrenceType LATTICE("SimpleMap", ["k", "v"], MAP(TVAR("k"), TVAR("v")), mapLatticeScope),
     projectScope -> Type{"Name"} with occurrenceType USERTYPE("Name", [], nameScope),
     new maySetScope, new mustSetScope, new mapLatticeScope, new nameScope,
 

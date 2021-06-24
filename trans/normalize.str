@@ -4,13 +4,148 @@ imports
 
   analysis
   signatures/flock/-
+  libspoofax/term/origin
+
+signature 
+  sorts
+
+    TYPE
+  
+  constructors
+  
+    NAME   : TYPE
+    TERM   : TYPE
+    INDEX  : TYPE
+    INT    : TYPE
+    STRING : TYPE
+    FLOAT  : TYPE
+    BOOL   : TYPE
+    TUPLE  : list(TYPE) -> TYPE
+    LIST   : TYPE -> TYPE
+    MAP    : TYPE * TYPE -> TYPE
+    SET    : TYPE -> TYPE
+
+    USERTYPE    : ID * list(string) * scope -> TYPE
+    LATTICE     : ID * list(string) * TYPE * scope -> TYPE
+    CONSTRUCTOR : TYPE * list(TYPE) -> TYPE
+    FUNCTION    : TYPE * list(ID) * list(TYPE) -> TYPE
+    PROPERTY    : TYPE -> TYPE
+    TVAR        : ID -> TYPE
+    INST        : TYPE * list(TYPE) -> TYPE
+
+    OCCURRENCE : TYPE  
+
+rules
+
+
+  // thread-replacement that retains annotations
+
+  thread-map_(s): ([], t) -> ([], t)
+  thread-map_(s): ([x | xs], t) -> ([y' | ys], t'')
+	where <s> (x, t) => (y, t')
+	    ; <thread-map_(s)> (xs, t') => (ys, t'')
+	    ; y' := <origin-track-forced(!y)> x
+
+  thread-replacement_(s) :
+    (c#(ts){t*}, x) -> (c#(ts'){t*}, y)
+    where <thread-map_(s)> (ts, x) => (ts', y)
+
+  thread-bottomup_(s) = 
+    rec x(thread-replacement_(x); s)
+
 
 strategies
 
-  normalize-module = debug; topdown(try(annotate-prop-rule))
+  normalize-module =
+    topdown(try(rename-var))
+  ; topdown(try(result-expression-in-binding))
+  ; topdown(try(hoist-in-where))
+  ; topdown(try(annotate-prop-rule))
+  ; topdown(try(annotate-implicit-lattice-conversion))
+  ; topdown(try(annotate-expr-term))
+
+strategies
+
+  rename-var: Ref(n) -> Ref(<concat-strings> ["usr", n])
+  rename-var: TypedRef(n, t) -> TypedRef(<concat-strings> ["usr", n], t)
+  rename-var: Var(n) -> Var(<concat-strings> ["usr", n])
+  rename-var: Binding(n, e) -> Binding(<concat-strings> ["usr", n], e)
+  rename-var: TypedBinding(n, t, e) -> TypedBinding(<concat-strings> ["usr", n], t, e)
+  rename-var: PatternVar(n) -> PatternVar(<concat-strings> ["usr", n])
+  rename-var: Param(a) -> Param(<concat-strings> ["usr", a])
+  rename-var: TypedParam(a, t) -> TypedParam(<concat-strings> ["usr", a], t)
+
+strategies
   
-  annotate-prop-rule: pr@PropRule(name, match, SetLiteral(_), whereClause) -> pr
+  result-expression-in-binding: PropRule(_, _, ExprExprRef(Ref(_)), _) -> <id>
+  result-expression-in-binding: PropRule(name, match, expr{t*}, whereClause) ->
+    PropRule(name, match, ExprExprRef(Ref(newName)), newClauses)
+  with 
+    newName := <newname> "tmp"
+  ; type := <get-type> expr
+  ; newBinding := TypedBinding(newName, <stx-type-to-flock-type> type, expr{t*})
+  ; newClauses := <append-to-where-clauses(|newBinding)> whereClause
+
+strategies 
+  
+  hoist-in-where: NoWhereClause() -> <id>
+  hoist-in-where: WhereClause(bindings) -> WhereClause(newBindings)
+  with 
+    newBindings := <map(!(<id>, []); thread-bottomup_(hoist-into-binding); ?(t, bs); ![bs, [t]]; concat); concat> bindings
+
+  hoist-into-binding: (expr{t*}, bindings) ->
+    (ExprExprRef(Ref(newName)), <concat> [bindings, [newBinding]])
+  where
+    <should-hoist> expr
+  with
+    newName := <newname> "tmp"
+  ; type := <get-type> expr{t*}
+  ; newBinding := TypedBinding(newName, <stx-type-to-flock-type> type, expr{t*})
+  //; newBinding := Binding(newName, expr)
+
+
+  should-hoist = ?SetComp(_, _) + ?Union(_, _) + ?SetLiteral(_)
+  
+  hoist-into-binding: (expr, bindings) -> <id> where <not(should-hoist)> expr
+  
+strategies
+  
+  annotate-prop-rule: pr@PropRule(name, match, expr, whereClause) -> PropRule(name, match, castExpr, whereClause)
   where
     propType := <get-type> name
-  ; <debug> propType
+  ; exprType := <get-type> expr
+  ; <not(eq)> (propType, exprType)
+  ; castExpr := Cast(expr, <stx-type-to-flock-type> propType)
+
+strategies
   
+  annotate-implicit-lattice-conversion: Union(lhs, rhs) -> Union(newLhs, newRhs)
+  where
+    newLhs := <try(get-lattice-inner)> lhs 
+  ; newRhs := <try(get-lattice-inner)> rhs 
+  
+  get-lattice-inner: e -> e'
+  where
+    t := <get-type; ?INST(LATTICE(_, _, _, _), _)> e
+  ; e' := LatticeValue(e)
+
+strategies
+
+  annotate-expr-term: e@ExprTerm(name, params){t*} -> TypedExprTerm(exprType, name, params){t*}
+  where
+    exprType := <get-type; stx-type-to-flock-type> e
+  
+strategies
+
+  stx-type-to-flock-type: INST(LATTICE(n, _, _, _), params) -> UserTypeParams(n, <map(stx-type-to-flock-type)> params) where <length; int-gt(|0)> params
+  stx-type-to-flock-type: INST(LATTICE(n, _, _, _), params) -> UserTypeNoParams(n)
+  stx-type-to-flock-type: INST(USERTYPE(n, _, _), params) -> UserTypeParams(n, <map(stx-type-to-flock-type)> params) where <length; int-gt(|0)> params
+  stx-type-to-flock-type: INST(USERTYPE(n, _, _), params) -> UserTypeNoParams(n)
+  stx-type-to-flock-type: CONSTRUCTOR(inner, params) -> <stx-type-to-flock-type> inner
+  stx-type-to-flock-type: NAME() -> Name()
+  stx-type-to-flock-type: SET(inner) -> Set(<stx-type-to-flock-type> inner)
+  stx-type-to-flock-type: t -> <debug; fail> ("Unsupported type ", t)
+
+  append-to-where-clauses(|clause): NoWhereClause() -> WhereClause([clause])
+  append-to-where-clauses(|clause): WhereClause([clauses]) -> WhereClause([clause|clauses])
+

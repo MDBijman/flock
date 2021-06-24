@@ -13,7 +13,6 @@ signature
     //ExprRef // SDF3 considers this an alias
     //FunRef // SDF3 considers this an alias
     Literal
-    MapBinding
     MapCompExpr
     MapCompSource
     MatchArm
@@ -24,6 +23,7 @@ signature
 
   constructors
     ExprTerm : ConsName * list(Expr) -> Expr
+    TypedExprTerm : Type * ConsName * list(Expr) -> Expr
     ExprExprRef : Ref -> Expr
     PropOrAppl : PropName * Var -> Expr
     ExprTuple : Expr * list(Expr) -> Expr
@@ -55,12 +55,12 @@ signature
 
     Match : Expr * list(MatchArm) -> Expr
 
+    EmptyLiteral : Expr
     SetLiteral : list(Expr) -> Expr
     SetComp : Expr * list(SetCompExpr) -> Expr
-    MapLiteral : list(MapBinding) -> Expr
-    MapComp : MapBinding * list(MapCompExpr) -> Expr
+    MapLiteral : list(Expr) -> Expr
+    MapComp : Expr * list(MapCompExpr) -> Expr
     MapLookup : Expr * Expr -> Expr
-    EmptySetOrMapLiteral : Expr
 
     SetCompExprSource : SetCompSource -> SetCompExpr
     SetCompExprPredicate : CompPredicate -> SetCompExpr
@@ -70,7 +70,7 @@ signature
     MatchPredicate : Expr * list(SetCompMatchArm) -> CompPredicate
     SetSource : Pattern * Expr -> SetCompSource
     MapSource : Pattern * Pattern * Expr -> MapCompSource
-    MapBinding : Expr * Expr -> MapBinding
+    MapBinding : Expr * Expr -> Expr
 
     TermIndex : Var -> Expr
 
@@ -94,6 +94,7 @@ signature
 
 	Cast : Expr * Type -> Expr
 	WithOrigin : Expr * list(Expr) -> Expr
+	LatticeValue : Expr -> Expr
 
     //ExprRef : Ref -> ExprRef
     TopOf : Type -> Ref
@@ -116,6 +117,7 @@ signature
     typeAssignableTo : TYPE * TYPE
     typesAssignableTo maps typeAssignableTo(list(*), list(*))
     typeImplicitlyConvertibleTo : TYPE * TYPE
+    typesUnionable : TYPE * TYPE
 
     typeOfExpr : scope * scope * Expr -> TYPE
     typesOfExprs maps typeOfExpr(*, *, list(*)) = list(*)
@@ -170,13 +172,21 @@ rules
   typeAssignableTo(STRING(), INST(USERTYPE("Name", [], _), [])).
   typeAssignableTo(INST(USERTYPE("Name", [], _), []), STRING()).
   typeAssignableTo(INST(USERTYPE("Name", [], _), []), NAME()).
-  typeAssignableTo(INST(LATTICE("MaySet", _, b, _), _), a) :- typeAssignableTo(b, a).
-  typeAssignableTo(a, INST(LATTICE("MaySet", _, b, _), _)) :- typeAssignableTo(a, b).
+  typeAssignableTo(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) :- typeAssignableTo(a, b).
+  typeAssignableTo(INST(LATTICE(_, _, b, _), _), a) :- typeAssignableTo(b, a).
+  typeAssignableTo(a, INST(LATTICE(_, _, b, _), _)) :- typeAssignableTo(a, b).
   typeAssignableTo(a, b) :-
     a == b | error $[The type [a] cannot be assigned to type [b].].
   
-  typeImplicitlyConvertibleTo(INST(LATTICE("MaySet", _, SET(b), _), _), SET(a)) :- a == b.
+  typeImplicitlyConvertibleTo(INST(LATTICE(_, _, b, _), _), a) :- a == b.
+  typeImplicitlyConvertibleTo(b, INST(LATTICE(_, _, a, _), _)) :- a == b.
   typeImplicitlyConvertibleTo(a, b) :- a == b | error $[The type [a] cannot be converted to type [b].]. 
+
+  typesUnionable(SET(_), SET(_)).
+  typesUnionable(MAP(_, _), MAP(_, _)).
+  typesUnionable(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) :- typesUnionable(a, b).
+  typesUnionable(INST(LATTICE(_, _, a, _), _), b) :- typesUnionable(a, b).
+  typesUnionable(b, INST(LATTICE(_, _, a, _), _)) :- typesUnionable(b, a).
 
   typeOfExpr(ms, s, e@ExprTerm(consName, exprs)) = T@INST(constructorResultType, exTArgs) :- {consName' constructorType constructorParamTypes tName tParams tScope instScope promotedConstructorParamTypes exprTypes}
     @consName.ref := consName',
@@ -188,6 +198,19 @@ rules
     promotedConstructorParamTypes == promoteTypes(instScope, constructorParamTypes, tName, consName),
     exprTypes == typesOfExprs(ms, s, exprs),
     matchTypes(exprTypes, promotedConstructorParamTypes) | error "Analysis of nested expressions failed. Did you specify the correct number of arguments?".
+
+  typeOfExpr(ms, s, e@TypedExprTerm(type, consName, exprs)) = T@INST(constructorResultType, exTArgs) :- {consName' constructorType constructorParamTypes tName tParams tScope instScope promotedConstructorParamTypes exprTypes}
+    @consName.ref := consName',
+    @e.type := CONSTRUCTOR(T, promotedConstructorParamTypes),
+    occurrenceType of Constructor{consName} in s |-> [(_, (Constructor{consName'}, constructorType))] | error $[Unable to resolve constructor [consName] uniquely.],
+    CONSTRUCTOR(constructorResultType, constructorParamTypes) == constructorType,
+    USERTYPE(tName, tParams, tScope) == constructorResultType,
+    T == typeOfType(ms, s, type),
+    instScope == createInstTypeScope(new, tParams, exTArgs),
+    promotedConstructorParamTypes == promoteTypes(instScope, constructorParamTypes, tName, consName),
+    exprTypes == typesOfExprs(ms, s, exprs),
+    matchTypes(exprTypes, promotedConstructorParamTypes) | error "Analysis of nested expressions failed. Did you specify the correct number of arguments?".
+
 
   typeOfExpr(ms, s, e@PropOrAppl(funName, arg)) = T :- {funQueryResult}
     @e.type := T,
@@ -268,9 +291,22 @@ rules
     armTs == typesOfMatchArms(ms, s, arms, scrutineeType),
     isListSameType(armTs) | error "All arms of a match expression must have the same type.".
 
+  typeOfExpr(ms, s, e@EmptyLiteral()) = T :-
+    @e.type := T,
+    assertSetOrMap(T).
+
   typeOfExpr(ms, s, e@SetLiteral(items)) = T@SET(setType) :-
     @e.type := T,
     _ == typesOfExprs(ms, s, items).
+
+  typeOfExpr(ms, s, e@MapBinding(k, v)) = T@BINDING(Tk, Tv) :-
+    @e.type := T,
+    Tk == typeOfExpr(ms, s, k),
+    Tv == typeOfExpr(ms, s, v).
+
+  typeOfExpr(ms, s, e@MapLiteral(items)) = T@MAP(Tk, Tv) :-
+    @e.type := T,
+    [BINDING(Tk, Tv)|_] == typesOfExprs(ms, s, items).
 
   typeOfExpr(ms, s, e@SetComp(result, setCompExprs)) = T@SET(setType) :- {setCompScope}
     @e.type := T,
@@ -278,16 +314,11 @@ rules
     setCompExprsOk(ms, setCompScope, setCompExprs),
     T == SET(typeOfExpr(ms, setCompScope, result)). // because this is a set comprehension
 
-  typeOfExpr(ms, s, e@EmptySetOrMapLiteral()) = unknown_t :-
-    @e.type := unknown_t,
-    assertSetOrMap(unknown_t).
-
   typeOfExpr(ms, s, e@Union(l, r)) = T :- {lT rT}
     @e.type := T, T == lT,
     lT == typeOfExpr(ms, s, l),
     rT == typeOfExpr(ms, s, r),
-    typeImplicitlyConvertibleTo(lT, SET(_)) | error $[LHS of union is not set or convertible to set],
-    typeImplicitlyConvertibleTo(rT, SET(_)) | error $[RHS of union is not set or convertible to set].
+    typesUnionable(lT, rT) | error $[Cannot union these types].
 
   typeOfExpr(ms, s, e@Cast(inner, type)) = T :- {castType exprType}
     @e.type := T, T == castType,
@@ -298,6 +329,11 @@ rules
   typeOfExpr(ms, s, e@WithOrigin(inner, origins)) = T :- {innerType}
     @e.type := T, T == innerType,
     innerType == typeOfExpr(ms, s, inner).
+
+  typeOfExpr(ms, s, e@LatticeValue(inner)) = T :- {exprType}
+    @e.type := T,
+    exprType == typeOfExpr(ms, s, inner),
+    T == latticeValueType(exprType).
 
   typeOfExpr(ms, _, e@ExprLiteral(l@IntLiteral(v))) = INT() :-
     @e.type := INT(), @l.type := INT(), @v.type := INT().
@@ -321,11 +357,11 @@ rules
     
   typeOfExpr(ms, s, e@ExprExprRef(t@TopOf(lattice))) = T :-
     @e.type := T, @t.type := T,
-    INST(LATTICE(_, _, T, _), _) == typeOfLattice(s, s, lattice).
+    T@INST(LATTICE(_, _, _, _), _) == typeOfLattice(s, s, lattice).
     
   typeOfExpr(ms, s, e@ExprExprRef(t@BottomOf(lattice))) = T :-
     @e.type := T, @t.type := T,
-    INST(LATTICE(_, _, T, _), _) == typeOfType(s, s, lattice).
+    T@INST(LATTICE(_, _, _, _), _) == typeOfLattice(s, s, lattice).
 
   typeOfExpr(ms, _, e) = UNKNOWN_T :-
     try { false } | warning $[Type checking of expression [e] has not been implemented yet.].

@@ -35,6 +35,11 @@ strategies
       public IStrategoTerm value;
       public Set<Dependency> dependencies;
       
+      ~name(~name other) {
+        this.value = other.value;
+        this.dependencies = other.dependencies;
+      }
+      
 	  ~name(IStrategoTerm value) {
 	    this.value = value;
 		this.dependencies = SetUtils.create();

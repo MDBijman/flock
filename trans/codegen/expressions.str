@@ -60,9 +60,10 @@ rules
   transform-expr(|bindings): Appl(LeqOf(lattice), [l, r]) -> <lattice-leq(|lattice)> (l, r)
   transform-expr(|bindings): Appl(GeqOf(lattice), [l, r]) -> <lattice-geq(|lattice)> (l, r)
   transform-expr(|bindings): Appl(NLeqOf(lattice), [l, r]) -> <lattice-nleq(|lattice)> (l, r)
+  transform-expr(|bindings): LatticeValue(e) -> <transform-expr(|bindings); access-lattice-value> e
   
   // Functions
-  transform-expr(|bindings): PropOrAppl(func, arg) -> <invoke-function(|func)> [ExpressionName(Id(<to-term-name> arg))]
+  transform-expr(|bindings): PropOrAppl(func, arg) -> <invoke-function(|func)> [ExpressionName(Id(arg))]
   transform-expr(|bindings): Appl(Ref(func), args) -> <map(transform-expr);invoke-function(|func)> args
   
   // Literals
@@ -76,16 +77,10 @@ rules
   transform-expr(|bindings): WithOrigin(expr, vars) -> <transform-expr(|bindings); add-origins(|vars)> expr
   transform-expr(|bindings): Cast(expr, type) -> <transform-expr(|bindings); construct-from(|type)> expr
   transform-expr(|bindings): ExprExprRef(x) -> <transform-expr(|bindings)> x
-  transform-expr(|bindings): Ref(name) -> java:expr |[ x ]| where x := <to-term-name> name
-  transform-expr(|bindings): TypedRef(name, UserTypeParams(type, _)) -> java:expr |[ new ~type(x) ]|
-  where
-    x := <to-term-name> name
-  transform-expr(|bindings): TypedRef(name, Name()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
-  where
-    x := <to-term-name> name
-  transform-expr(|bindings): TypedRef(name, String()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
-  where
-    x := <to-term-name> name
+  transform-expr(|bindings): Ref(name) -> java:expr |[ ~name ]|
+  transform-expr(|bindings): TypedRef(name, UserTypeParams(type, _)) -> java:expr |[ new ~type(~name) ]|
+  transform-expr(|bindings): TypedRef(x, Name()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
+  transform-expr(|bindings): TypedRef(x, String()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
   transform-expr(|bindings): Match(expr, arms) -><fail> with <debug> "Match must not be nested expression"
    
   transform-expr(|bindings): NEq(l, r)    -> Not(InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r]))
@@ -108,12 +103,11 @@ rules
   transform-expr(|bindings): ExprTuple(l, r) -> NewInstance(None(), [], Id("StrategoTuple"), [], None(), [ NewArrayInit(ClassType([], Id("IStrategoTerm"), None()), [AnnotateDim([])], ArrayInit(<concat> [[<transform-expr(|bindings);cast-to-term> l], <map(transform-expr(|bindings);cast-to-term)> r])), Null()])
   transform-expr(|bindings): Occurrence(namespace, name) -> Null() // FIXME
   
-  transform-expr(|bindings): TermIndex(r) -> java:expr |[ ~name.getProperty(~string).lattice ]|
+  transform-expr(|bindings): TermIndex(r) -> java:expr |[ ~r.getProperty(~string).lattice ]|
   where
-    name := <to-term-name> r
-  ; string := <to-string-literal> "position"
+    string := <to-string-literal> "position"
 
-  transform-expr(|bindings): TypedExprTerm(constructor, args, UserTypeParams(type, _)) -> java:expr |[ new ~type(e) ]|
+  transform-expr(|bindings): TypedExprTerm(UserTypeParams(type, _), constructor, args) -> java:expr |[ new ~type(e) ]|
   where
     e := <transform-expr(|bindings)> ExprTerm(constructor, args)
   transform-expr(|bindings): ExprTerm(constructor, args) -> NewInstance(
@@ -163,8 +157,8 @@ rules
   
   add-origins(|vars): e -> <add-origins> (vars, e)
   add-origins: ([], e) -> e
-  add-origins: ([Var(v)|t], e)      -> <add-origins> (t, java:expr |[ e.withOrigin(~v-name.dependencies()) ]|) where v-name := <to-value-name> v
-  add-origins: ([Position(v)|t], e) -> <add-origins> (t, java:expr |[ e.withOrigin(Helpers.getTermPosition(~v-name)) ]|) where v-name := <to-term-name> v
+  add-origins: ([Var(v)|t], e)      -> <add-origins> (t, java:expr |[ e.withOrigin(~v.dependencies()) ]|)
+  add-origins: ([Position(v)|t], e) -> <add-origins> (t, java:expr |[ e.withOrigin(Helpers.getTermPosition(~v)) ]|)
   
   // set comprehension
   set-comp-body(|bindings): (expr, predicates) -> (name, [
@@ -181,13 +175,12 @@ rules
   set-comp-sources(|expr, predicates, bindings, result-name): [] -> <set-comp-predicates(|bindings, result-name)> (expr, predicates)
   set-comp-sources(|expr, predicates, bindings, result-name): [SetCompExprSource(SetSource(PatternVar(var), set))|tail] ->
   	java:bstm |[
-  		for (Object ~name : ~collection) {
+  		for (Object ~var : ~collection) {
   			~stmts*
   		}
   	]|
   with
-    name       := <to-term-name> var
-  ; collection := <transform-expr(|bindings); access-lattice-value; cast-to-set> set
+    collection := <transform-expr(|bindings); access-lattice-value; cast-to-set> set
   ; stmts*     := [<set-comp-sources(|expr, predicates, bindings, result-name)> tail]
 
   set-comp-predicates(|bindings, result-name): (expr, []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id(result-name)), None(), Id("add"), [<transform-expr(|bindings)> expr]))
