@@ -199,15 +199,15 @@ rules
   map-comp-sources(|bind, predicates, bindings, result-name): [] -> <map-comp-predicates(|bindings, result-name)> (bind, predicates)
   map-comp-sources(|bind, predicates, bindings, result-name): [MapCompExprSource(MapSource(PatternVar(k), PatternVar(v), map))|tail] -> 
     java:bstm |[
-      for (Object o : ~map-expr) {
+      for (Object o : (~map-expr).entrySet()) {
       	Entry entry = (Entry) o;
-        Object k_t = entry.getKey();
-        Object v_t = entry.getValue();
+        Object ~k = entry.getKey();
+        Object ~v = entry.getValue();
         ~loop-stmt
       }
     ]|
   with 
-    map-expr  := <transform-expr(|bindings)> map
+    map-expr  := <transform-expr(|bindings); access-lattice-value; cast-to-map> map
   ; loop-stmt := <map-comp-sources(|bind, predicates, bindings, result-name)> tail
     
   map-comp-predicates(|bindings, result-name): (MapBinding(k, v), []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id(result-name)), None(), Id("put"), [<transform-expr(|bindings)> k, <transform-expr(|bindings)> v]))

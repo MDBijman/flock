@@ -121,7 +121,7 @@ rules
     new thisBindingScope,
     thisBindingScope -P-> parentBindingScope,
     exprT == typeOfExpr(moduleScope, parentBindingScope, expr),
-    declT == typeOfTypeOrLattice(moduleScope, parentBindingScope, type) | error $[Declared type not equal to expression type],
+    declT == typeOfTypeExpr(moduleScope, new, type) | error $[Declared type not equal to expression type],
     exprT == declT,
     thisBindingScope -> Variable{name} with occurrenceType exprT,
     occurrenceType of Variable{name} in thisBindingScope |-> [_] | error $[The variable [name] is declared more than once.],

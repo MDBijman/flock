@@ -42,5 +42,5 @@ rules
   map-subsets = invoke-maputils(|"isSubset")
   map-superset = invoke-maputils(|"isSuperset")
 
-
   cast-to-set: expr -> CastReference(ClassType([], Id("Set"), None()), [], expr)
+  cast-to-map: expr -> CastReference(ClassType([], Id("Map"), None()), [], expr)

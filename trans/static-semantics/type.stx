@@ -14,7 +14,6 @@ signature
     //SimpleType = Type // SDF3 considers this an alias
     Type
     TypeDef
-    TypeOrVar
     TypeKind
     Param
 
@@ -22,7 +21,7 @@ signature
     TypeDefParams : TypeName * list(Var) * TypeKind * list(ConsDef) -> TypeDef
     TypeDefNoParams : TypeName * TypeKind * list(ConsDef) -> TypeDef
 
-    ConsDef : ConsName * list(TypeOrVar) -> ConsDef
+    ConsDef : ConsName * list(Type) -> ConsDef
 
     TypeVar: Var -> Type
     //TypeOrVarVar : Var -> TypeOrVar
@@ -57,10 +56,10 @@ signature
     TypedParam : Var * Type -> Param
 
     UserTypeNoParams : TypeName -> Type
-    UserTypeParams : TypeName * list(TypeOrVar) -> Type
-    TypeTuple : TypeOrVar * TypeOrVar -> Type
-    Map : TypeOrVar * Type -> Type
-    Set : TypeOrVar -> Type
+    UserTypeParams : TypeName * list(Type) -> Type
+    TypeTuple : Type * Type -> Type
+    Map : Type * Type -> Type
+    Set : Type -> Type
 
   constraints
 
@@ -109,14 +108,11 @@ signature
     consDefOk : scope * scope * ConsDef * TYPE
     consDefsOk maps consDefOk(*, *, list(*), *)
 
-    typeOfTypeOrVar : scope * scope * TypeOrVar -> TYPE
-    typesOfTypeOrVars maps typeOfTypeOrVar(*, *, list(*)) = list(*)
-
     typeOfLattice : scope * scope * Type -> TYPE
-    typeOfLatticeUserType : scope * scope * string * list(TypeOrVar) -> TYPE
+    typeOfLatticeUserType : scope * scope * string * list(Type) -> TYPE
 
     typeOfType : scope * scope * Type -> TYPE
-    typeOfUserType : scope * scope * string * list(TypeOrVar) -> TYPE
+    typeOfUserType : scope * scope * string * list(Type) -> TYPE
 
     typeOfTypeParameter : scope * string -> string
     typesOfTypeParameters maps typeOfTypeParameter(*, list(*)) = list(*)
@@ -124,6 +120,7 @@ signature
     typeOfTypeOrLattice : scope * scope * Type -> TYPE
     
     typeOfTypeExpr : scope * scope * Type -> TYPE
+    typesOfTypeExprs maps typeOfTypeExpr(*, *, list(*)) = list(*)
     
     typeOfParam : scope * scope * scope * Param -> TYPE
     
@@ -318,11 +315,11 @@ rules
     @name.ref := name,
     @c.type := consDefType,
     @name.type := consDefType,
-    Types == typesOfTypeOrVars(moduleScope, typeScope, types),
+    Types == typesOfTypeExprs(moduleScope, typeScope, types),
     consDefType == CONSTRUCTOR(parent, Types),
     declareConstructor(moduleScope, name, consDefType).
 
-  typeOfTypeOrVar(moduleScope, typeScope, tv@TypeOrVarType(t)) = T@typeOfType(moduleScope, typeScope, t) :-
+  /*typeOfTypeOrVar(moduleScope, typeScope, tv@TypeOrVarType(t)) = T@typeOfType(moduleScope, typeScope, t) :-
     @tv.type := T.
   typeOfTypeOrVar(moduleScope, typeScope, tv@TypeOrVarVar(name)) = resultType :- {name'}
     @name.ref := name',
@@ -331,7 +328,7 @@ rules
     @tv.type := resultType,
     resultType == TVAR(name),
     TVariable{name} in typeScope |-> [(_, TVariable{name'})] | error $[The type variable [name] could not be resolved uniquely.].
-
+*/
   typeOfLattice(moduleScope, latticeScope, e@UserTypeNoParams(name)) = result :-
     @e.type := result,
     result == typeOfLatticeUserType(moduleScope, latticeScope, name, []).
@@ -340,13 +337,13 @@ rules
     @e.type := result,
     result == typeOfLatticeUserType(moduleScope, latticeScope, name, params).
 
-  typeOfLattice(moduleScope, latticeScope, e@Map(key, value)) = result :- {kT vT Xs lName' tLattice lName instTScope innerType}
+/*  typeOfLattice(moduleScope, latticeScope, e@Map(key, value)) = result :- {kT vT Xs lName' tLattice lName instTScope innerType}
     @e.type := result,
     occurrenceType of Lattice{"Map"} in moduleScope |-> [(_, (Lattice{lName'}, tLattice@LATTICE(_, Xs, _, _)))] | error $[The lattice Map could not be resolved uniquely.],
-    kT == typeOfTypeOrVar(moduleScope, latticeScope, key),
-    vT == typeOfLattice(moduleScope, latticeScope, value),
+    kT == typeOfTypeExpr(moduleScope, latticeScope, key),
+    vT == typeOfTypeExpr(moduleScope, latticeScope, value),
     instTScope == createInstTypeScope(latticeScope, Xs, [kT, vT]),
-    result == promoteType(instTScope, INST(tLattice, [kT, vT]), "Map", "Map").
+    result == promoteType(instTScope, INST(tLattice, [kT, vT]), "Map", "Map").*/
 
   typeOfLattice(_, _, t) = UNKNOWN_T :-
     false | error $[The expression [t] is not a valid reference to a lattice.].
@@ -355,7 +352,7 @@ rules
     @name.ref := lName',
     @name.type := result,
     occurrenceType of Lattice{name} in moduleScope |-> [(_, (Lattice{lName'}, tLattice@LATTICE(_, Xs, _, _)))] | error $[The lattice [name] could not be resolved uniquely.],
-    Ts == typesOfTypeOrVars(moduleScope, latticeScope, params),
+    Ts == typesOfTypeExprs(moduleScope, latticeScope, params),
     instTScope == createInstTypeScope(latticeScope, Xs, Ts),
     result == promoteType(instTScope, INST(tLattice, Ts), name, name).
 
@@ -382,21 +379,21 @@ rules
     result == typeOfUserType(moduleScope, typeScope, name, params).
   typeOfType(moduleScope, typeScope, e@TypeTuple(l, r)) = TUPLE([L, R]) :-
     @e.type := TUPLE([L, R]),
-    L == typeOfTypeOrVar(moduleScope, typeScope, l),
-    R == typeOfTypeOrVar(moduleScope, typeScope, r).
+    L == typeOfTypeExpr(moduleScope, typeScope, l),
+    R == typeOfTypeExpr(moduleScope, typeScope, r).
   typeOfType(moduleScope, typeScope, e@Map(k, v)) = MAP(K, V) :-
     @e.type := MAP(K, V),
-    K == typeOfTypeOrVar(moduleScope, typeScope, k),
-    V == typeOfLattice(moduleScope, typeScope, v).
+    K == typeOfTypeExpr(moduleScope, typeScope, k),
+    V == typeOfTypeExpr(moduleScope, typeScope, v).
   typeOfType(moduleScope, typeScope, e@Set(t)) = SET(T) :-
     @e.type := SET(T),
-    T == typeOfTypeOrVar(moduleScope, typeScope, t).
+    T == typeOfTypeExpr(moduleScope, typeScope, t).
 
   typeOfUserType(moduleScope, typeScope, name, params) = result :- {Xs Ts tName' tUsertype instTScope}
     @name.ref := tName',
     @name.type := result,
     occurrenceType of Type{name} in moduleScope |-> [(_, (Type{tName'}, tUsertype@USERTYPE(_, Xs, _)))] | error $[The type [name] could not be resolved uniquely.],
-    Ts == typesOfTypeOrVars(moduleScope, typeScope, params),
+    Ts == typesOfTypeExprs(moduleScope, typeScope, params),
     instTScope == createInstTypeScope(typeScope, Xs, Ts),
     result == promoteType(instTScope, INST(tUsertype, Ts), name, name).
 
@@ -415,14 +412,14 @@ rules
 	  in moduleScope |-> [(_, (_, latticeOrUserType))] | error $[Cannot uniquely resolve type/lattice],
 	result == processTypeOrLattice(moduleScope, typeLatticeScope, name, params, latticeOrUserType).
 
-  processTypeOrLattice: scope * scope * string * list(TypeOrVar) * TYPE -> TYPE
+  processTypeOrLattice: scope * scope * string * list(Type) * TYPE -> TYPE
   processTypeOrLattice(moduleScope, typeScope, name, params, tUsertype@USERTYPE(_, Xs, _)) = result :- {Ts instTScope}
-    Ts == typesOfTypeOrVars(moduleScope, typeScope, params),
+    Ts == typesOfTypeExprs(moduleScope, typeScope, params),
     instTScope == createInstTypeScope(typeScope, Xs, Ts),
     result == promoteType(instTScope, INST(tUsertype, Ts), name, name).
     
   processTypeOrLattice(moduleScope, latticeScope, name, params, tLattice@LATTICE(_, Xs, _, _)) = result :- {Ts instTScope}
-    Ts == typesOfTypeOrVars(moduleScope, latticeScope, params),
+    Ts == typesOfTypeExprs(moduleScope, latticeScope, params),
     instTScope == createInstTypeScope(latticeScope, Xs, Ts),
     result == promoteType(instTScope, INST(tLattice, Ts), name, name).
     
@@ -433,7 +430,7 @@ rules
   
   typeOfTypeExpr(moduleScope, typeScope, s@Set(_)) = typeOfType(moduleScope, typeScope, s).
   typeOfTypeExpr(moduleScope, typeScope, m@Map(_, _)) = typeOfType(moduleScope, typeScope, m).
-  typeOfTypeExpr(moduleScope, typeScope, UserTypeNoParams(name)) = typeOfTypeOrLattice(moduleScope, typeLatticeScope, UserTypeParams(name, [])).
+  typeOfTypeExpr(moduleScope, typeScope, UserTypeNoParams(name)) = typeOfTypeExpr(moduleScope, typeScope, UserTypeParams(name, [])).
   typeOfTypeExpr(moduleScope, typeScope, UserTypeParams(name, params)) = result :- {latticeOrUserType}
 	query occurrenceType
 	  filter P* I* and { dcl :- typeOrLattice(dcl, name) } 
@@ -446,5 +443,5 @@ rules
     @tv.type := resultType,
     resultType == TVAR(name),
     TVariable{name} in typeScope |-> [(_, TVariable{name'})] | error $[The type variable [name] could not be resolved uniquely.].
-  
+  typeOfTypeExpr(moduleScope, typeScope, t) = typeOfType(moduleScope, typeScope, t).
     

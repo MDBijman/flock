@@ -117,7 +117,7 @@ signature
     typeAssignableTo : TYPE * TYPE
     typesAssignableTo maps typeAssignableTo(list(*), list(*))
     typeImplicitlyConvertibleTo : TYPE * TYPE
-    typesUnionable : TYPE * TYPE
+    typesUnionable : TYPE * TYPE -> TYPE
 
     typeOfExpr : scope * scope * Expr -> TYPE
     typesOfExprs maps typeOfExpr(*, *, list(*)) = list(*)
@@ -131,6 +131,9 @@ signature
 
     setCompExprOk : scope * scope * SetCompExpr
     setCompExprsOk maps setCompExprOk(*, *, list(*))
+
+    mapCompExprOk : scope * scope * MapCompExpr
+    mapCompExprsOk maps mapCompExprOk(*, *, list(*))
 
     compPredicateOk : scope * scope * CompPredicate
     
@@ -182,11 +185,13 @@ rules
   typeImplicitlyConvertibleTo(b, INST(LATTICE(_, _, a, _), _)) :- a == b.
   typeImplicitlyConvertibleTo(a, b) :- a == b | error $[The type [a] cannot be converted to type [b].]. 
 
-  typesUnionable(SET(_), SET(_)).
-  typesUnionable(MAP(_, _), MAP(_, _)).
-  typesUnionable(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) :- typesUnionable(a, b).
-  typesUnionable(INST(LATTICE(_, _, a, _), _), b) :- typesUnionable(a, b).
-  typesUnionable(b, INST(LATTICE(_, _, a, _), _)) :- typesUnionable(b, a).
+  typesUnionable(SET(a), SET(b)) = SET(a) :- typeImplicitlyConvertibleTo(b, a).
+  typesUnionable(MAP(k1, v1), MAP(k2, v2)) = MAP(k1, v1) :-
+     typeImplicitlyConvertibleTo(k2, k1),
+     typeImplicitlyConvertibleTo(v2, v1).
+  typesUnionable(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) = typesUnionable(a, b).
+  typesUnionable(INST(LATTICE(_, _, a, _), _), b) = typesUnionable(a, b).
+  typesUnionable(b, INST(LATTICE(_, _, a, _), _)) = typesUnionable(b, a).
 
   typeOfExpr(ms, s, e@ExprTerm(consName, exprs)) = T@INST(constructorResultType, exTArgs) :- {consName' constructorType constructorParamTypes tName tParams tScope instScope promotedConstructorParamTypes exprTypes}
     @consName.ref := consName',
@@ -314,15 +319,22 @@ rules
     setCompExprsOk(ms, setCompScope, setCompExprs),
     T == SET(typeOfExpr(ms, setCompScope, result)). // because this is a set comprehension
 
+  typeOfExpr(ms, s, e@MapComp(result, mapCompExprs)) = T@MAP(kT, vT) :- {mapCompScope}
+    @e.type := T,
+    new mapCompScope, mapCompScope -P-> s,
+    mapCompExprsOk(ms, mapCompScope, mapCompExprs),
+    BINDING(kT, vT) == typeOfExpr(ms, mapCompScope, result),
+    T == MAP(kT, vT). // because this is a map comprehension
+
   typeOfExpr(ms, s, e@Union(l, r)) = T :- {lT rT}
-    @e.type := T, T == lT,
+    @e.type := T,
     lT == typeOfExpr(ms, s, l),
     rT == typeOfExpr(ms, s, r),
-    typesUnionable(lT, rT) | error $[Cannot union these types].
+    T == typesUnionable(lT, rT) | error $[Cannot union these types].
 
   typeOfExpr(ms, s, e@Cast(inner, type)) = T :- {castType exprType}
     @e.type := T, T == castType,
-    castType == typeOfTypeOrLattice(ms, new, type),
+    castType == typeOfTypeExpr(ms, new, type),
     exprType == typeOfExpr(ms, s, inner),
     typeAssignableTo(exprType, castType).
 
@@ -432,6 +444,14 @@ rules
     typeOfPattern(s, pattern) == setT.
 
   setCompExprOk(ms, s, SetCompExprPredicate(predicate)) :- compPredicateOk(ms, s, predicate).
+
+  mapCompExprOk(ms, s, MapCompExprSource(MapSource(keyPattern, valuePattern, expr))) :- {exprT kT vT}
+    exprT == typeOfExpr(ms, s, expr),
+    typeImplicitlyConvertibleTo(exprT, MAP(kT, vT)),
+    typeOfPattern(s, keyPattern) == kT,
+    typeOfPattern(s, valuePattern) == vT.
+  
+  mapCompExprOk(ms, s, MapCompExprPredicate(pred)) :- compPredicateOk(ms, s, pred).
 
   compPredicateOk(ms, s, Predicate(expr)) :-
     typeOfExpr(ms, s, expr) == BOOL().

@@ -104,7 +104,7 @@ strategies
   //; newBinding := Binding(newName, expr)
 
 
-  should-hoist = ?SetComp(_, _) + ?Union(_, _) + ?SetLiteral(_)
+  should-hoist = ?SetComp(_, _) + ?SetLiteral(_) + ?MapComp(_, _) + ?MapLiteral(_) + ?Union(_, _)
   
   hoist-into-binding: (expr, bindings) -> <id> where <not(should-hoist)> expr
   
@@ -143,7 +143,9 @@ strategies
   stx-type-to-flock-type: INST(USERTYPE(n, _, _), params) -> UserTypeNoParams(n)
   stx-type-to-flock-type: CONSTRUCTOR(inner, params) -> <stx-type-to-flock-type> inner
   stx-type-to-flock-type: NAME() -> Name()
+  stx-type-to-flock-type: STRING() -> String()
   stx-type-to-flock-type: SET(inner) -> Set(<stx-type-to-flock-type> inner)
+  stx-type-to-flock-type: MAP(k, v) -> Map(<stx-type-to-flock-type> k, <stx-type-to-flock-type> v)
   stx-type-to-flock-type: t -> <debug; fail> ("Unsupported type ", t)
 
   append-to-where-clauses(|clause): NoWhereClause() -> WhereClause([clause])

@@ -26,7 +26,7 @@ rules
   lattice-type-name = !"FlockLattice"
   lattice-type-id = !Id(<lattice-type-name>)
   lattice-type = !ClassType(<lattice-type-id>, None())
-  to-lattice-name: Map(k, v) -> "MapLattice"
+  to-lattice-name: Map(k, v) -> "SimpleMap"
   to-lattice-name: UserTypeParams(name, _) -> name
   to-lattice-name: n -> n
    

@@ -6,6 +6,8 @@ imports
   CodeGen
   Analysis
   Transform
+  statix/Menus
+  statix/References
 
 language
 

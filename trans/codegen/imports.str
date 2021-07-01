@@ -66,7 +66,7 @@ rules
   	"flock.subject.common.FlockLattice",
   	"flock.subject.common.FlockLattice.MaySet",
   	"flock.subject.common.FlockLattice.MustSet",
-  	"flock.subject.common.FlockLattice.MapLattice",
+  	"flock.subject.common.FlockLattice.SimpleMap",
   	"flock.subject.common.FlockLattice.FlockValueLattice",
   	"flock.subject.common.FlockLattice.FlockCollectionLattice",
   	"flock.subject.common.FlockValue",

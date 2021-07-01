@@ -14,7 +14,7 @@ signature
   constructors
     FunDefParams : string * list(ID) * list(FunArg) * Expr -> FunDef
     FunDefNoParams : string * list(FunArg) * Expr -> FunDef
-    Arg : string * TypeOrVar -> FunArg
+    Arg : string * Type -> FunArg
 
 rules
 
@@ -62,6 +62,6 @@ rules
   typeOfFunParam(moduleScope, funScope, Arg(name, type)) = paramType :-
     @name.ref := name,
     @name.type := paramType,
-    paramType == typeOfTypeOrVar(moduleScope, funScope, type),
+    paramType == typeOfTypeExpr(moduleScope, funScope, type),
     funScope -> Variable{name} with occurrenceType paramType,
     occurrenceType of Variable{name} in funScope |-> [_] | error $[The parameter [name] is declared more than once.].

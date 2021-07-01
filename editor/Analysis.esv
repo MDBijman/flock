@@ -1,9 +1,6 @@
 module Analysis
 
-imports
-
-  statix/Menus
-
+  
 language
 
   observer : editor-analyze (constraint) (multifile)
