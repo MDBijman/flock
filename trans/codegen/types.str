@@ -15,7 +15,7 @@ strategies
 
   simple-cast(|type): expr -> <simple-cast> (type, expr)
   simple-cast: (UserTypeParams(t, _), expr) -> java |[ (~t) ~expr ]|
-  simple-cast: (Map(_, _), expr) -> java |[ (SimpleMap) ~expr ]|
+  simple-cast: (Map(_, _), expr) -> java |[ (Map) ~expr ]|
   simple-cast: (Set(_), expr) -> java |[ (Set) ~expr ]|
   simple-cast: (typename, expr) -> java |[ (~typename) ~expr ]| with <is-string> typename
 
@@ -26,7 +26,7 @@ strategies
   construct-from: (name, expr) -> java:expr |[ new ~name(~expr) ]| with <is-string> name
   
   type-to-java-type: UserTypeParams(name, _) -> ClassType(Id(name), None()) with <is-string> name
-  type-to-java-type: Map(_, _) -> ClassType(Id("SimpleMap"), None())
+  type-to-java-type: Map(_, _) -> ClassType(Id("Map"), None())
   type-to-java-type: Set(_) -> ClassType(Id("Set"), None())
   //type-to-java: UserTypeParams(name, args) -> ClassType([], Id(name), Some(TypeArguments(<map(type-to-java)> args))) with <is-string> name
   
@@ -47,5 +47,5 @@ strategies
   
   is-map: "SimpleMap" -> <id>
   
-  requires-statements = ?MapComp(_, _, _, _) + ?SetComp(_, _, _, _) + ?Match(_, _)
+  requires-statements = ?MapComp(_, _, _, _) + ?SetComp(_, _, _, _) + ?Match(_, _) + ?Let(_, _)
   

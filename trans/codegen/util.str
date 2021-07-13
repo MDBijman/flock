@@ -10,6 +10,7 @@ imports
   signatures/java/interfaces/-
   signatures/java/statements/-
   signatures/java/packages/-
+  libspoofax/term/origin
 
 rules
   to-string-literal: s -> <concat-strings> ["\"", s, "\""]
@@ -38,4 +39,22 @@ rules
   cast-to-term: expr -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("toTerm"), [expr])
   get-subterm(|index): expr -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("at"), [expr, Deci(<int-to-string> index)])
   add-or-concat: (l, r) -> InvokeQExp(ExpressionName(Id("Helpers")), None(), Id("add"), [l, r])
+
+rules
+
+
+  // thread-replacement that retains annotations
+
+  thread-map_(s): ([], t) -> ([], t)
+  thread-map_(s): ([x | xs], t) -> ([y' | ys], t'')
+	where <s> (x, t) => (y, t')
+	    ; <thread-map_(s)> (xs, t') => (ys, t'')
+	    ; y' := <origin-track-forced(!y)> x
+
+  thread-replacement_(s) :
+    (c#(ts){t*}, x) -> (c#(ts'){t*}, y)
+    where <thread-map_(s)> (ts, x) => (ts', y)
+
+  thread-bottomup_(s) = 
+    rec x(thread-replacement_(x); s)
   

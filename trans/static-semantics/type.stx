@@ -214,19 +214,19 @@ rules
     declareLattice(moduleScope, latticeName, latticeDefType),
     Xs == typesOfTypeParameters(latticeScope, typeParams),
     latticeDefType == LATTICE(latticeName, Xs, latticeType, latticeScope),
-    latticePartsOk(moduleScope, latticeScope, latticeType, latticeParts),
+    latticePartsOk(moduleScope, latticeScope, latticeDefType, latticeParts),
     mandatoryLatticePartsSpecified(latticeScope, latticeName, ["type", "lub", "bottom"]).
 
-  latticePartOk(moduleScope, latticeScope, latticeType, LatticePartType(t)) :-
+  latticePartOk(moduleScope, latticeScope, latticeDefType@LATTICE(_, _, latticeType, _), LatticePartType(t)) :-
     latticeType == typeOfType(moduleScope, latticeScope, t),
     latticePartUnique(latticeScope, "type").
 
-  latticePartOk(moduleScope, latticeScope, latticeType, Lub(p1, p2, e)) :- {lubScope}
+  latticePartOk(moduleScope, latticeScope, latticeDefType@LATTICE(_, _, latticeType, _), Lub(p1, p2, e)) :- {lubScope}
     new lubScope,
     lubScope -P-> moduleScope,
     latticeType == typeOfParam(moduleScope, latticeScope, lubScope, p1),
     latticeType == typeOfParam(moduleScope, latticeScope, lubScope, p2),
-    typeAssignableTo(typeOfExpr(moduleScope, lubScope, e), latticeType),
+    typeAssignableTo(typeOfExpr(moduleScope, lubScope, e), instType(moduleScope, latticeDefType)),
     latticePartUnique(latticeScope, "lub").
 
   typeOfParam(moduleScope, latticeScope, methodScope, TypedParam(n, t)) = T :-
@@ -239,15 +239,6 @@ rules
     @n.ref := n,
     @n.type := T,
     methodScope -> Variable{n} with occurrenceType T.
-
-  latticePartOk(moduleScope, latticeScope, latticeType, Lub(Param(a), Param(b), e)) :- {lubScope}
-    @a.ref := a, @a.type := latticeType, @b.ref := b, @b.type := latticeType,
-    new lubScope,
-    lubScope -P-> moduleScope,
-    lubScope -> Variable{a} with occurrenceType latticeType,
-    lubScope -> Variable{b} with occurrenceType latticeType,
-    typeAssignableTo(typeOfExpr(moduleScope, lubScope, e), latticeType),
-    latticePartUnique(latticeScope, "lub").
 
   latticePartOk(moduleScope, latticeScope, latticeType, Glb(a, b, e)) :- {glbScope}
     @a.ref := a, @a.type := latticeType, @b.ref := b, @b.type := latticeType,
@@ -287,11 +278,12 @@ rules
 
   latticePartOk(moduleScope, latticeScope, latticeType, Top(top)) :-
     latticePartUnique(latticeScope, "top"),
-    typeAssignableTo(typeOfExpr(moduleScope, moduleScope, top), latticeType).
+    typeAssignableTo(typeOfExpr(moduleScope, moduleScope, top), instType(moduleScope, latticeType)).
 
-  latticePartOk(moduleScope, latticeScope, latticeType, Bottom(bottom)) :-
+  latticePartOk(moduleScope, latticeScope, latticeType, Bottom(bottom)) :- {exprT}
     latticePartUnique(latticeScope, "bottom"),
-    typeAssignableTo(typeOfExpr(moduleScope, moduleScope, bottom), latticeType).
+    exprT == typeOfExpr(moduleScope, moduleScope, bottom),
+    typeAssignableTo(exprT, instType(moduleScope, latticeType)).
 
   typeDefOk(moduleScope, tdef@TypeDefNoParams(name, _, consDefs)) :- {typeDefType}
     @tdef.type := typeDefType,

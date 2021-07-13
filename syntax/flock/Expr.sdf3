@@ -2,10 +2,11 @@ module flock/Expr
 
 imports
 
-flock/Common
-flock/Pattern
-flock/Occurrences
-flock/Type
+	flock/Common
+	flock/Pattern
+	flock/Occurrences
+	flock/Type
+	flock/Property
 
 template options
 tokenize: "!.,(["
@@ -31,6 +32,10 @@ context-free syntax // expressions
 	  else
 	    [Expr]
 	]
+	Expr.Let = [
+	  let
+	    [Binding]
+	  in [Expr]]
 	
 	Expr.Eq = [[Expr] == [Expr]] {left}
 	Expr.NEq = [[Expr] != [Expr]] {left}
@@ -116,6 +121,7 @@ context-free priorities
   Expr.WithOrigin >
   Expr.MapLookup >
   Expr.Cast >
+
   { Expr.Not
     Expr.Neg } >
   { non-assoc:
@@ -142,4 +148,5 @@ context-free priorities
   Expr.Or >
   { left:
     Expr.If
-    Expr.Match }
+    Expr.Match } >
+  Expr.Let

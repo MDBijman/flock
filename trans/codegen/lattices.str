@@ -147,6 +147,15 @@ rules
   */
   to-lattice-method(|lattice-name, lattice-value-name, kind): Top(expr) -> java:method-dec |[
     public static ~lattice-name top() {
+      ~bstm*:stmts
+      return ~res;
+    }
+  ]|
+  where <requires-statements> expr
+  with (res, stmts) := <expr-to-stmts> expr
+  
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Top(expr) -> java:method-dec |[
+    public static ~lattice-name top() {
       return ~java-expr;
     }
   ]| where java-expr := <transform-expr> expr
@@ -154,6 +163,15 @@ rules
   /*
   * Lattice method: Bottom
   */
+    to-lattice-method(|lattice-name, lattice-value-name, kind): Bottom(expr) -> java:method-dec |[
+    public static ~lattice-name bottom() {
+      ~bstm*:stmts
+      return ~res;
+    }
+  ]|
+  where <requires-statements> expr
+  with (res, stmts) := <expr-to-stmts> expr
+  
   to-lattice-method(|lattice-name, lattice-value-name, kind): Bottom(expr) -> java:method-dec |[
     public static ~lattice-name bottom() {
       return ~java-expr;
@@ -173,8 +191,7 @@ rules
       return ~res;
     }
   ]|
-  where
-    <requires-statements> expr
+  where <requires-statements> expr
   with
     decls-l := <make-local-declarations> (lattice-name, "this", l, lt)
   ; decls-r := <make-local-declarations> (lattice-name, "other", r, rt)
@@ -190,8 +207,8 @@ rules
   ]|
   with
     java-expr := <transform-expr; simple-cast(|lattice-value-name); construct-from(|lattice-name)> expr
-  ; decls-l := <make-local-declarations> (l, lt)
-  ; decls-r := <make-local-declarations> (r, rt)
+  ; decls-l := <make-local-declarations> (lattice-name, "this", l, lt)
+  ; decls-r := <make-local-declarations> (lattice-name, "other", r, rt)
 
 
   /*

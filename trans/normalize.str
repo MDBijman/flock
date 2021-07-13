@@ -4,7 +4,8 @@ imports
 
   analysis
   signatures/flock/-
-  libspoofax/term/origin
+  
+  codegen/util
 
 signature 
   sorts
@@ -35,34 +36,20 @@ signature
 
     OCCURRENCE : TYPE  
 
-rules
-
-
-  // thread-replacement that retains annotations
-
-  thread-map_(s): ([], t) -> ([], t)
-  thread-map_(s): ([x | xs], t) -> ([y' | ys], t'')
-	where <s> (x, t) => (y, t')
-	    ; <thread-map_(s)> (xs, t') => (ys, t'')
-	    ; y' := <origin-track-forced(!y)> x
-
-  thread-replacement_(s) :
-    (c#(ts){t*}, x) -> (c#(ts'){t*}, y)
-    where <thread-map_(s)> (ts, x) => (ts', y)
-
-  thread-bottomup_(s) = 
-    rec x(thread-replacement_(x); s)
 
 
 strategies
 
   normalize-module =
     topdown(try(rename-var))
+  ; topdown(try(normalize-union))
   ; topdown(try(result-expression-in-binding))
   ; topdown(try(hoist-in-where))
   ; topdown(try(annotate-prop-rule))
   ; topdown(try(annotate-implicit-lattice-conversion))
   ; topdown(try(annotate-expr-term))
+  ; topdown(try(annotate-binding))
+  ; topdown(try(normalize-lattice-methods))
 
 strategies
 
@@ -76,7 +63,27 @@ strategies
   rename-var: TypedParam(a, t) -> TypedParam(<concat-strings> ["usr", a], t)
 
 strategies
+
+  normalize-union: u@Union(a, b){a*} -> TypedUnion(newA, t, newB){a*}
+  with
+    t := <get-type; stx-type-to-flock-type> u
+  ; newA := <cast-collection-literal(|a*)> (t, a) 
+  ; newB := <cast-collection-literal(|a*)> (t, b)
   
+  cast-collection-literal(|a*): (t, SetLiteral(elems)) -> SetLiteral(newElems){a*}
+  with
+    newElems := <map(!Cast(<id>, t))> elems
+    
+  cast-collection-literal(|a*): (Map(kT, vT), MapLiteral(bindings)) -> MapLiteral(newBindings){a*}
+  with
+    newBindings := <map(?MapBinding(k, v); !MapBinding(k, Cast(v, vT)))> bindings
+
+  cast-collection-literal(|a*): (Map(kT, vT), m@MapComp(MapBinding(k, v), s)) -> MapComp(MapBinding(k, Cast(v, vT)), s){a*}
+    
+  cast-collection-literal(|a*): (t, s@SetComp(_, _)) -> <fail> "Not implemented"
+  
+strategies
+
   result-expression-in-binding: PropRule(_, _, ExprExprRef(Ref(_)), _) -> <id>
   result-expression-in-binding: PropRule(name, match, expr{t*}, whereClause) ->
     PropRule(name, match, ExprExprRef(Ref(newName)), newClauses)
@@ -93,6 +100,7 @@ strategies
   with 
     newBindings := <map(!(<id>, []); thread-bottomup_(hoist-into-binding); ?(t, bs); ![bs, [t]]; concat); concat> bindings
 
+  should-hoist = ?SetComp(_, _) + ?SetLiteral(_) + ?MapComp(_, _) + ?MapLiteral(_) + ?Union(_, _) + ?TypedUnion(_, _, _)
   hoist-into-binding: (expr{t*}, bindings) ->
     (ExprExprRef(Ref(newName)), <concat> [bindings, [newBinding]])
   where
@@ -101,10 +109,6 @@ strategies
     newName := <newname> "tmp"
   ; type := <get-type> expr{t*}
   ; newBinding := TypedBinding(newName, <stx-type-to-flock-type> type, expr{t*})
-  //; newBinding := Binding(newName, expr)
-
-
-  should-hoist = ?SetComp(_, _) + ?SetLiteral(_) + ?MapComp(_, _) + ?MapLiteral(_) + ?Union(_, _)
   
   hoist-into-binding: (expr, bindings) -> <id> where <not(should-hoist)> expr
   
@@ -134,13 +138,46 @@ strategies
   annotate-expr-term: e@ExprTerm(name, params){t*} -> TypedExprTerm(exprType, name, params){t*}
   where
     exprType := <get-type; stx-type-to-flock-type> e
+
+strategies
+
+  annotate-binding: Binding(n, e) -> TypedBinding(n, t, e)
+  where
+    t := <get-type; stx-type-to-flock-type> e
+
+strategies
+
+  normalize-lattice-methods: LatticeDefNoParams(name, kind, parts) -> LatticeDefNoParams(name, kind, newParts)
+  with
+    latticeType := <get-type; stx-type-to-flock-type> name
+  ; newParts := <map(try(lattice-result-in-let(|latticeType)))> parts
+
+  lattice-result-in-let(|latticeType): Top(expr) -> Top(Let(newBinding, Cast(ExprExprRef(Ref(newName)), latticeType)))
+  with
+    newName := <newname> "tmp"
+  ; innerType := <get-type; stx-type-to-flock-type> expr
+  ; newBinding := TypedBinding(newName, innerType, expr)  
+
+  lattice-result-in-let(|latticeType): Bottom(expr) -> Bottom(Let(newBinding, Cast(ExprExprRef(Ref(newName)), latticeType)))
+  with
+    newName := <newname> "tmp"
+  ; innerType := <get-type; stx-type-to-flock-type> expr
+  ; newBinding := TypedBinding(newName, innerType, expr)  
+
+  lattice-result-in-let(|latticeType): Lub(p1, p2, expr) -> Lub(p1, p2, Let(newBinding, Cast(ExprExprRef(Ref(newName)), latticeType)))
+  with
+    newName := <newname> "tmp"
+  ; innerType := <get-type; stx-type-to-flock-type> expr
+  ; newBinding := TypedBinding(newName, innerType, expr)
   
+
 strategies
 
   stx-type-to-flock-type: INST(LATTICE(n, _, _, _), params) -> UserTypeParams(n, <map(stx-type-to-flock-type)> params) where <length; int-gt(|0)> params
   stx-type-to-flock-type: INST(LATTICE(n, _, _, _), params) -> UserTypeNoParams(n)
   stx-type-to-flock-type: INST(USERTYPE(n, _, _), params) -> UserTypeParams(n, <map(stx-type-to-flock-type)> params) where <length; int-gt(|0)> params
   stx-type-to-flock-type: INST(USERTYPE(n, _, _), params) -> UserTypeNoParams(n)
+  stx-type-to-flock-type: LATTICE(n, _, _, _) -> UserTypeNoParams(n)
   stx-type-to-flock-type: CONSTRUCTOR(inner, params) -> <stx-type-to-flock-type> inner
   stx-type-to-flock-type: NAME() -> Name()
   stx-type-to-flock-type: STRING() -> String()

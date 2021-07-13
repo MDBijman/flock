@@ -26,6 +26,7 @@ rules
   expr-to-stmts: MapComp(m@MapBinding(a, b), _, _, predicates) -> <map-comp-body(|[])> (m, predicates)
   expr-to-stmts: SetComp(expr, _, _, predicates) -> <set-comp-body(|[])> (expr, predicates)
   expr-to-stmts: m@Match(_, _) -> <match-to-stmts> m
+  expr-to-stmts: l@Let(bind, expr) -> (<transform-expr> expr, <binding-to-code> bind)
   expr-to-stmts: _ -> []
 
   // Overload - be careful, this can cause issues when bindings aren't passed correctly.
@@ -49,6 +50,8 @@ rules
   
   // Collections (runtime dispatched to collection type)
   transform-expr(|bindings): TypedUnion(a, UserTypeParams(t, _), b) -> <lattice-lub(|t)> (a, b)
+  transform-expr(|bindings): TypedUnion(a, Map(_, _), b) -> <map-union> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
+  transform-expr(|bindings): TypedUnion(a, Set(_), b) -> <set-union> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
   transform-expr(|bindings): TypedEmptyLiteral(Map(_, _)) -> <map-create> []
   transform-expr(|bindings): TypedEmptyLiteral(Set(_))    -> <set-create> []
   
@@ -82,6 +85,7 @@ rules
   transform-expr(|bindings): TypedRef(x, Name()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
   transform-expr(|bindings): TypedRef(x, String()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
   transform-expr(|bindings): Match(expr, arms) -><fail> with <debug> "Match must not be nested expression"
+  transform-expr(|bindings): Let(bind, expr) -> <transform-expr(|bindings)> expr
    
   transform-expr(|bindings): NEq(l, r)    -> Not(InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r]))
   transform-expr(|bindings): Eq(l, r)     -> InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r])
@@ -135,7 +139,7 @@ rules
   
   match-to-stmts: x@Match(expr, arms) -> (result, <concat> [
       [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id(rootterm)), <transform-expr(|[]); cast-to-term> expr)]))],
-      [java:bstm |[ FlockLattice ~result = null; ]|],
+      [java:bstm |[ Object ~result = null; ]|],
       <map(match-arm-to-if(|result, rootterm, []))> arms,
       [java:bstm |[ if (~result == null) { throw new RuntimeException(~exception-string); } ]|]
     ])
