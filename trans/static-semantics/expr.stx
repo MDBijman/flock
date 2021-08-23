@@ -327,7 +327,9 @@ rules
     @e.type := T,
     Tk == typeOfExpr(ms, s, k),
     Tv == typeOfExpr(ms, s, v).
-
+    // Should be: typeImplicitlyConvertibleTo(typeOfExpr(ms, s, v), Tv)
+    // And similar for Tk and k
+    
   typeOfExpr(ms, s, e@MapLiteral(items)) = T@MAP(Tk, Tv) :-
     @e.type := T,
     [BINDING(Tk, Tv)|_] == typesOfExprs(ms, s, items).
