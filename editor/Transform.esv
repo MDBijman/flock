@@ -3,3 +3,4 @@ module Transform
 menus
   menu: "Transform" (openeditor)
     action: "Normalize (Java Backend)" = debug-show-normalized-java
+    action: "Infer Dep. Tracking" = debug-show-dependency-tracking-java

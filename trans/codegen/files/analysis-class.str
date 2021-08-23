@@ -33,16 +33,18 @@ strategies
     ]
 
   main-class(|r): module-name -> java:type-dec |[
-	  public class FlowAnalysis extends Analysis {
+	  public class FlowAnalysis extends ~superclass {
 	  	public FlowAnalysis() {
 	  	  super(~prop-name, ~direction-enum);
 	  	}
 	  	
-		public static void initNodeValue(Node node) {
+		public void initNodeValue(Node node) {
 		  ~bstm*:value-inits
 		}
-		  
-	    public static void initNodeTransferFunction(Node node) {
+		
+		~classb-dec*:pattern-match-methods
+		
+	    public void initNodeTransferFunction(Node node) {
 	      ~bstm:stmt
 	    }
 		      
@@ -74,23 +76,20 @@ strategies
 		 	}
 		  	while(!worklist.isEmpty()) ~worklist-body
 		}
-		
-		@Override
-		public Set<Node> getTermDependencies(Graph g, Node n) {
-			~bstm*:term-dependencies
-		}
 	  }
   ]| 
   with
     (name, direction) := <rules-to-analysis-term> r
   ; prop-name      := <to-string-literal> name
   ; direction-enum := <dir-to-java-enum> direction
+  ; superclass := <rules-with-dependencies < !"AnalysisWithDependencies" + !"Analysis"> r
   ; boundary-check-node := <analysis-boundary-check(|direction)> java:expr |[ node.interval ]|
   ; boundary-check-root := <analysis-boundary-check(|direction)> java:expr |[ root.interval ]|
   ; boundary-check-successor := <analysis-boundary-check(|direction)> java:expr |[ successor.interval ]|
 
-  ; value-inits := <retain-all(?PropDef(_, UserTypeParams(_, _))); map(propdef-to-add)> r
+  ; value-inits := <retain-all(?PropDef(_, UserTypeParams(_, _), _)); map(propdef-to-add)> r
   ; stmt := <node-factory-switch> r
+  ; pattern-match-methods := <get-sorted-proprules; number(cfg-pattern-to-method)> r
   ; val-setters := <get-newvalue-setters> r
   ; forward-updaters := <get-forward-updaters> r
   ; backward-updaters := <get-backward-updaters> r
@@ -130,11 +129,10 @@ strategies
 	    }
   	  ]|]
     ])
-  ; root-inits    := <lift-single> Block(<retain-all(?PropDef(_, _)); map(propdef-to-init)> r)
-  ; nodeset-inits := <lift-single> Block(<retain-all(?PropDef(_, _)); map(propdef-to-nodeset-init(|direction))> r)
-  ; term-dependencies := <retain-all(?PropRule(_, _, _, _)); prop-rules-to-term-dependencies>  r
+  ; root-inits    := <lift-single> Block(<retain-all(?PropDef(_, _, _)); map(propdef-to-init)> r)
+  ; nodeset-inits := <lift-single> Block(<retain-all(?PropDef(_, _, _)); map(propdef-to-nodeset-init(|direction))> r)
  
-  propdef-to-nodeset-init(|direction): PropDef(n, _) -> java:bstm |[
+  propdef-to-nodeset-init(|direction): PropDef(n, _, _) -> java:bstm |[
 	  {
 		FlockLattice init = node.getProperty(~name).lattice;
 		for (Node pred : ~predecessors) {
@@ -149,18 +147,18 @@ strategies
     name := <to-string-literal> n
   ; predecessors := <?"forward" < !|[ g.parentsOf(node) ]| + !|[ g.childrenOf(node) ]|> direction
 
-  get-newvalue-setters = filter(?PropDef(_, _)); map(propdef-to-newvalue)
+  get-newvalue-setters = filter(?PropDef(_, _, _)); map(propdef-to-newvalue)
 
-  propdef-to-newvalue: PropDef(name, _) -> java:bstm |[ FlockLattice ~new-name = node.getProperty(~prop-name).transfer.eval(node); ]|
+  propdef-to-newvalue: PropDef(name, _, _) -> java:bstm |[ FlockLattice ~new-name = node.getProperty(~prop-name).transfer.eval(node); ]|
   where
     new-name := $[[name]_n]
   ; prop-name := <to-string-literal> name
  
-  propdef-to-add: PropDef(n, UserTypeParams(tname, _)) -> java:bstm |[
+  propdef-to-add: PropDef(n, UserTypeParams(tname, _), _) -> java:bstm |[
   	node.addProperty(~name, ~tname.bottom());
   ]| where name := <to-string-literal> n
-                    
-  propdef-to-init: PropDef(n, _) -> java:bstm |[
+                      
+  propdef-to-init: PropDef(n, _, _) -> java:bstm |[
   	root.getProperty(~name).lattice = root.getProperty(~name).init.eval(root);
   ]| where name := <to-string-literal> n
 
@@ -170,6 +168,9 @@ strategies
   rules-to-analysis-term: r -> <getfirst(rule-to-prop-dir)> r
   rule-to-prop-dir: PropRule(name, Backward(_, _), _, _) -> (name, "backward")
   rule-to-prop-dir: PropRule(name, Forward(_, _), _, _) -> (name, "forward")
+  
+  rules-with-dependencies: r -> <getfirst(propdef-with-dependencies)> r
+  propdef-with-dependencies: PropDef(_, _, WithDependencies()) -> <id>
   
   dir-to-java-enum: "forward"  -> java:expr |[ Direction.FORWARD ]|
   dir-to-java-enum: "backward" -> java:expr |[ Direction.BACKWARD ]|
@@ -205,41 +206,3 @@ strategies
   direction-to-is-forward-expr: "backward" -> |[ false ]|
   direction-to-is-forward-expr: "forward"  -> |[ true ]|
  
-  /*
-  * Rules that generate the code for gathering dependencies based on property rules
-  */
- 
-  prop-rules-to-term-dependencies: r -> java:bstm* |[
-  	HashSet<Node> dependencies = new HashSet<Node>();
-  	
-  	return dependencies;
-  ]|
-  where dependency-stmts := <retain-all(rule-to-term-dependencies)> r
-  
-  /*
-  * Algorithm to generate code
-  * Pattern p
-  * For each constructor in p + distance to the root pattern
-  *   Output java code: 
-  *     given changed node n
-  *     for pair (con, dist) in statically generated set
-  *       if constr of n is con
-  *         try pattern of parent of n with distance dist
-  *         if match -> add node to result
-  * 
-  */
-  
-  rule-to-term-dependencies: PropRule(_, p, _, _) -> []
-  where
-    match := <get-match> p
-  with
-    code := <gather-pattern-matchables; debug> (match, 0)
-  
-  gather-pattern-matchables: (PatternTerm(con, sub), n) -> [(con, n) | sublist]
-  where sublist := <map(!(<id>, <inc> n); gather-pattern-matchables)> sub
-  gather-pattern-matchables: (PatternVar(_), n) -> [("_", n)]
-  gather-pattern-matchables: (_, n) -> []
-  
-  get-match: Forward(_, m) -> m 
-  get-match: Backward(_, m) -> m 
-  

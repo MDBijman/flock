@@ -76,7 +76,7 @@ rules // FlowSpec specific
            + \Signatures(s) -> <concat> <map(extract-signatures)> s\
            + ?LatticeDefs(<id>)
            + ?TypeDefs(<id>)
-           + \PropDefs(d, e) -> <conc> (d, <mapconcat(\PropDefExternals(e) -> <map(\PropDef(n,t) -> ExtPropDef(n,t)\)> e\)> e)\
+           + \PropDefs(d, e) -> <conc> (d, <mapconcat(\PropDefExternals(e) -> <map(\PropDef(n,t,k) -> ExtPropDef(n,t,k)\)> e\)> e)\
            + \PropRules(r) -> r\
            + ?FunDefs(<id>)
            )

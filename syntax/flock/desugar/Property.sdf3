@@ -9,5 +9,5 @@ imports
 
 context-free syntax
 	
-	PropDef.PropDef-DS = [prop [PropName]: [Type]]
-	PropDef.ExtPropDef = [external prop [PropName]: [Type]]
+	PropDef.PropDef-DS = [prop [PropName]: [Type] [DependencyOption]]
+	PropDef.ExtPropDef = [external prop [PropName]: [Type] [DependencyOption]]

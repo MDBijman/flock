@@ -45,6 +45,7 @@ strategies
   ; topdown(try(normalize-union))
   ; topdown(try(result-expression-in-binding))
   ; topdown(try(hoist-in-where))
+  ; topdown(try(annotate-empty-literal))
   ; topdown(try(annotate-prop-rule))
   ; topdown(try(annotate-implicit-lattice-conversion))
   ; topdown(try(annotate-expr-term))
@@ -70,7 +71,7 @@ strategies
   ; newA := <cast-collection-literal(|a*)> (t, a) 
   ; newB := <cast-collection-literal(|a*)> (t, b)
   
-  cast-collection-literal(|a*): (t, SetLiteral(elems)) -> SetLiteral(newElems){a*}
+  cast-collection-literal(|a*): (Set(t), SetLiteral(elems)) -> SetLiteral(newElems){a*}
   with
     newElems := <map(!Cast(<id>, t))> elems
     
@@ -78,9 +79,17 @@ strategies
   with
     newBindings := <map(?MapBinding(k, v); !MapBinding(k, Cast(v, vT)))> bindings
 
-  cast-collection-literal(|a*): (Map(kT, vT), m@MapComp(MapBinding(k, v), s)) -> MapComp(MapBinding(k, Cast(v, vT)), s){a*}
+  cast-collection-literal(|a*): (Map(kT, vT), m@MapComp(MapBinding(k, v), s)) -> MapComp(MapBinding(newK, newV), s){a*}
+  where
+    newV := <cast-if-necessary(|vT)> v
+  ; newK := <cast-if-necessary(|kT)> k
     
   cast-collection-literal(|a*): (t, s@SetComp(_, _)) -> <fail> "Not implemented"
+  cast-collection-literal(|a*): (t, expr) -> expr
+  
+  cast-if-necessary(|desiredT): value -> newValue
+  where
+   newValue := <!(desiredT, <get-type; stx-type-to-flock-type> value); not(eq) < !Cast(value, desiredT) + !value> 
   
 strategies
 
@@ -96,11 +105,10 @@ strategies
 strategies 
   
   hoist-in-where: NoWhereClause() -> <id>
-  hoist-in-where: WhereClause(bindings) -> WhereClause(newBindings)
-  with 
-    newBindings := <map(!(<id>, []); thread-bottomup_(hoist-into-binding); ?(t, bs); ![bs, [t]]; concat); concat> bindings
+  hoist-in-where: WhereClause(bindings) -> WhereClause(<map(hoist-in-where-inner); concat> bindings)
+  hoist-in-where-inner = !(<id>, []); thread-bottomup_(hoist-into-binding); ?(t, bs); ![bs, [t]]; concat
 
-  should-hoist = ?SetComp(_, _) + ?SetLiteral(_) + ?MapComp(_, _) + ?MapLiteral(_) + ?Union(_, _) + ?TypedUnion(_, _, _)
+  should-hoist = ?SetComp(_, _) + ?SetLiteral(_) + ?MapComp(_, _) + ?MapLiteral(_) + ?Union(_, _) + ?TypedUnion(_, _, _) + ?EmptyLiteral()
   hoist-into-binding: (expr{t*}, bindings) ->
     (ExprExprRef(Ref(newName)), <concat> [bindings, [newBinding]])
   where
@@ -111,7 +119,12 @@ strategies
   ; newBinding := TypedBinding(newName, <stx-type-to-flock-type> type, expr{t*})
   
   hoist-into-binding: (expr, bindings) -> <id> where <not(should-hoist)> expr
-  
+
+strategies
+
+  annotate-empty-literal: e@EmptyLiteral() -> TypedEmptyLiteral(t)
+  with t := <get-type; stx-type-to-flock-type> e
+
 strategies
   
   annotate-prop-rule: pr@PropRule(name, match, expr, whereClause) -> PropRule(name, match, castExpr, whereClause)
@@ -181,10 +194,11 @@ strategies
   stx-type-to-flock-type: CONSTRUCTOR(inner, params) -> <stx-type-to-flock-type> inner
   stx-type-to-flock-type: NAME() -> Name()
   stx-type-to-flock-type: STRING() -> String()
+  stx-type-to-flock-type: TERM() -> SimpleTypeTerm()
   stx-type-to-flock-type: SET(inner) -> Set(<stx-type-to-flock-type> inner)
   stx-type-to-flock-type: MAP(k, v) -> Map(<stx-type-to-flock-type> k, <stx-type-to-flock-type> v)
   stx-type-to-flock-type: t -> <debug; fail> ("Unsupported type ", t)
 
   append-to-where-clauses(|clause): NoWhereClause() -> WhereClause([clause])
-  append-to-where-clauses(|clause): WhereClause([clauses]) -> WhereClause([clause|clauses])
+  append-to-where-clauses(|clause): WhereClause(clauses) -> WhereClause(<concat> [clauses, [clause]])
 

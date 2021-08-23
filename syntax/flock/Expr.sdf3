@@ -63,9 +63,9 @@ context-free syntax // expressions
 	Expr.WithOrigin = [[Expr]{[{Origin ","}*]}]
 	Origin.Var = Var
 	Origin.Position = [position([Var])]
-	Expr.Cast = [[Expr] as [Type]]
+	Expr.Cast = [[Expr] as [Type]] {longest-match}
 	Expr.LatticeValue = [[Expr].inner]
-	Expr.EmptyLiteral = [{}]
+	Expr.EmptyLiteral = [{ }]
 	Expr.SetLiteral = [{ [{Expr ","}+] }]
 	Expr.TypedSetLiteral = [{[{Expr ","}*] }: [Type]]
 	Expr.SetComp = [{ [Expr] | [{SetCompExpr ", "}+] }]
@@ -119,8 +119,8 @@ context-free priorities
   Expr.Appl >
   Expr.LatticeValue >
   Expr.WithOrigin >
-  Expr.MapLookup >
   Expr.Cast >
+  Expr.MapLookup >
 
   { Expr.Not
     Expr.Neg } >

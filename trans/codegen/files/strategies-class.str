@@ -29,7 +29,7 @@ strategies
     imports := <all-imports>
   ; inners := <retain-all(propdef-to-strategy-class)> r 
   
-  propdef-to-strategy-class: PropDef(name, type) -> classb-dec |[
+  propdef-to-strategy-class: PropDef(name, type, _) -> classb-dec |[
     public static class ~class-name extends Strategy {
       public static ~class-name instance = new ~class-name();
        
@@ -42,7 +42,7 @@ strategies
           Flock.printDebug(~error-message + id.getId());
           return current;
         }
-        Flock.instance.analysisWithName(~property-name).updateUntilBoundary(Flock.instance.graph, node);
+        Flock.instance.analysisWithName(~property-name).updateResultUntilBoundary(Flock.instance.graph, node);
         
 		~result-stmt
 
@@ -57,6 +57,13 @@ strategies
   ; result-stmt := <type-to-strategy-result(|property-name)> type
   
   type-to-strategy-result(|property-name): t@UserTypeParams("MaySet", [p]) -> java:bstm |[
+	IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
+		.stream()
+		.map(n -> Helpers.toTerm(n))
+		.collect(Collectors.toList()));
+  ]|
+
+  type-to-strategy-result(|property-name): t@UserTypeParams("MustSet", [p]) -> java:bstm |[
 	IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
 		.stream()
 		.map(n -> Helpers.toTerm(n))

@@ -58,6 +58,7 @@ signature
     Match : Expr * list(MatchArm) -> Expr
 
     EmptyLiteral : Expr
+    TypedEmptyLiteral : Type -> Expr
     SetLiteral : list(Expr) -> Expr
     SetComp : Expr * list(SetCompExpr) -> Expr
     MapLiteral : list(Expr) -> Expr
@@ -179,14 +180,18 @@ rules
   typeAssignableTo(INST(USERTYPE("Name", [], _), []), STRING()).
   typeAssignableTo(INST(USERTYPE("Name", [], _), []), NAME()).
   typeAssignableTo(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) :- typeAssignableTo(a, b).
-  typeAssignableTo(INST(LATTICE(_, _, b, _), _), a) :- typeAssignableTo(b, a).
+  typeAssignableTo(INST(LATTICE(_, _, a, _), _), b) :- typeAssignableTo(a, b).
   typeAssignableTo(a, INST(LATTICE(_, _, b, _), _)) :- typeAssignableTo(a, b).
+  typeAssignableTo(INST(USERTYPE(_, _, _), _), TERM()).
+  typeAssignableTo(INST(CONSTRUCTOR(_, _), _), TERM()).
   typeAssignableTo(a, b) :-
     a == b | error $[The type [a] cannot be assigned to type [b].].
   
   typeImplicitlyConvertibleTo(INST(LATTICE(_, _, b, _), _), INST(LATTICE(_, _, a, _), _)) :- a == b.
   typeImplicitlyConvertibleTo(INST(LATTICE(_, _, b, _), _), a) :- a == b.
   typeImplicitlyConvertibleTo(b, INST(LATTICE(_, _, a, _), _)) :- a == b.
+  typeImplicitlyConvertibleTo(INST(USERTYPE(_, _, _), _), TERM()).
+  typeImplicitlyConvertibleTo(INST(CONSTRUCTOR(_, _), _), TERM()).
   typeImplicitlyConvertibleTo(a, b) :- a == b | error $[The type [a] cannot be converted to type [b].]. 
 
   typesUnionable(SET(a), SET(b)) = SET(a) :- typeImplicitlyConvertibleTo(b, a).
@@ -219,7 +224,6 @@ rules
     promotedConstructorParamTypes == promoteTypes(instScope, constructorParamTypes, tName, consName),
     exprTypes == typesOfExprs(ms, s, exprs),
     matchTypes(exprTypes, promotedConstructorParamTypes) | error "Analysis of nested expressions failed. Did you specify the correct number of arguments?".
-
 
   typeOfExpr(ms, s, e@PropOrAppl(funName, arg)) = T :- {funQueryResult}
     @e.type := T,
@@ -307,11 +311,17 @@ rules
 
   typeOfExpr(ms, s, e@EmptyLiteral()) = T :-
     @e.type := T,
+    //false | error $[emptyliteral [T]],
     assertSetOrMap(T).
 
-  typeOfExpr(ms, s, e@SetLiteral(items)) = T@SET(setType) :-
+  typeOfExpr(ms, s, e@TypedEmptyLiteral(setType)) = T :-
     @e.type := T,
-    _ == typesOfExprs(ms, s, items).
+    T == typeOfType(ms, s, setType),
+    assertSetOrMap(T).
+
+  typeOfExpr(ms, s, e@SetLiteral(items)) = SET(T) :-
+    @e.type := SET(T),
+    [T|_] == typesOfExprs(ms, s, items).
 
   typeOfExpr(ms, s, e@MapBinding(k, v)) = T@BINDING(Tk, Tv) :-
     @e.type := T,
@@ -479,5 +489,5 @@ rules
     
   assertSetOrMap(SET(_)).
   assertSetOrMap(MAP(_, _)).
-  assertSetOrMap(x) :-
-    false | error $[The expected type is [x], which is not a set or map.].
+  assertSetOrMap(INST(LATTICE(_, _, inner, _), _)) :- assertSetOrMap(inner).
+  assertSetOrMap(x) :- false | error $[The expected type is [x], which is not a set or map.].

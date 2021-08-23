@@ -11,12 +11,15 @@ signature
   sorts
     Binding
     PropDef
+    DependencyOption
     PropPattern
     PropRule
     PropWhere
 
   constructors
-    PropDef : PropName * Type -> PropDef
+    PropDef : PropName * Type * DependencyOption -> PropDef
+    WithDependencies : DependencyOption
+    NoDependencies   : DependencyOption
 
     PropRule : PropName * PropPattern * Expr * PropWhere -> PropRule
 
@@ -56,7 +59,7 @@ rules
   propRulePatternIsConstructor(t, _) :-
     false | error $[A constructor without type parameters must be used as the root of a property rule pattern. The type [t] does not provide any such constructors.].
 
-  propDefOk(moduleScope, PropDef(propName, type)) :- {lattice}
+  propDefOk(moduleScope, PropDef(propName, type, _)) :- {lattice}
     @propName.ref := propName,
     @propName.type := lattice,
     lattice == typeOfLattice(moduleScope, new, type), // properties do not have type parameters

@@ -27,7 +27,7 @@ rules
   
   to-function-name = append-string(|"_f")
 
-  property-function: PropDef(name, _) -> java:method-dec |[
+  property-function: PropDef(name, _, _) -> java:method-dec |[
     public static FlockLattice ~fun-name(Object o) {
       Node node = (Node) o;
       return node.getProperty(~prop-name).lattice;
@@ -43,7 +43,7 @@ rules
     , None()
     , None()
     , None()
-    , <concat> [<filter(?PropDef(_, _));map(property-function)> r, <filter(?FunDefParams(_, _, _, _));map(user-function)> r]
+    , <concat> [<filter(?PropDef(_, _, _));map(property-function)> r, <filter(?FunDefParams(_, _, _, _));map(user-function)> r]
     )]
 
   user-function: FunDefParams(name, _, params, expr) -> MethodDecl(

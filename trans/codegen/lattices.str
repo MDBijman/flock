@@ -20,8 +20,8 @@ imports
   signatures/java/packages/-
 
 rules
-  create-lattice-map: r -> <filter(?PropDef(_, _));map(create-lattice-tuple)> r
-  create-lattice-tuple: PropDef(prop, UserTypeParams(lattice, _)) -> (prop, lattice)
+  create-lattice-map: r -> <filter(?PropDef(_, _, _));map(create-lattice-tuple)> r
+  create-lattice-tuple: PropDef(prop, UserTypeParams(lattice, _), _) -> (prop, lattice)
   
   lattice-type-name = !"FlockLattice"
   lattice-type-id = !Id(<lattice-type-name>)

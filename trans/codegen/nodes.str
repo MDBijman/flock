@@ -29,12 +29,14 @@ rules
   node-factory-switch: r -> Block(<get-sorted-proprules; number(node-factory-switch-entry)>)
   get-sorted-proprules = filter(?PropRule(_, _, _, _));reverse
   
-  node-factory-switch-entry: (PropRule(prop, pat, _, _), index) -> If(<cfg-pattern-to-condition(|"node.term", [])> pat, Block([setter]))
+  node-factory-switch-entry: (PropRule(prop, pat, _, _), index)
+    -> If(Invoke(MethodName(Id(match-name)), [ExpressionName(Id("node"))]), Block([setter]))
   where
-    function := <get-transfer-function> index;
-    setvar := <pattern-to-setter(|prop)> pat;
-    setter := ExpressionStatement(Assign(setvar, function))
-  
+    function := <get-transfer-function> index
+  ; setvar := <pattern-to-setter(|prop)> pat
+  ; setter := ExpressionStatement(Assign(setvar, function))
+  ; match-name := $[matchPattern[<int-to-string> index]]
+    
   pattern-to-setter(|prop): Backward(_, _) -> <pattern-to-transfer-setter> prop
   pattern-to-setter(|prop): Forward(_, _) -> <pattern-to-transfer-setter> prop
   pattern-to-transfer-setter: prop -> Field(<make-property-get(|"node")>, Id("transfer"))

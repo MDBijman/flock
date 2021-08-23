@@ -10,7 +10,7 @@ flock/Flow
 
 context-free syntax // Properties
 
-	PropDef.PropDef = [[PropName]: [Type]]
+	PropDef.PropDef = [[PropName]: [Type] [DependencyOption]]
 
 context-free syntax // Property Rules
 
@@ -41,6 +41,9 @@ context-free syntax // Property Rules
 	
 	Binding.Binding = [[Var] = [Expr]]
 	Binding.TypedBinding = [[Var]: [Type] = [Expr]]
+	
+	DependencyOption.WithDependencies = [with dependencies]
+	DependencyOption.NoDependencies   = []
 
 context-free priorities
 	PropCFGNodePattern = Pattern <0> .> Pattern.PatternVar

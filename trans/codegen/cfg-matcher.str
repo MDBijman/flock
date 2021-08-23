@@ -74,19 +74,69 @@ rules
   ; else := <cfg-matcher-switch-internal(make-default)> tail
 
   
-  cond-same: (l, r) -> Eq(l, r)
-  cond-equals: (l, r) -> InvokeQExp(l, None(), Id("equals"), [r])
+  cond-same:   (l, r)  -> java:expr |[ ~l == ~r ]|
+  cond-equals: (l, r)  -> java:expr |[ ~l.equals(~r) ]|
   cond-type-equals(|chain, rootterm): pattern -> <cond-equals> (<chain-to-getname(|rootterm)> chain, StringLiteral(<cfg-pattern-to-typename;to-string-literal> pattern))
   cond-arity-equals(|chain, rootterm): length -> <cond-same> (InvokeQExp(<chain-to-expression(|rootterm)> chain, None(), Id("getSubtermCount"), []), Deci(<int-to-string> length))
   chain-to-expression(|rootterm): [] -> ExpressionName(Id(rootterm))
-  chain-to-expression(|rootterm): [h|t] -> <chain-to-expression(|rootterm);get-subterm(|h)> t
-  chain-to-getname(|rootterm): chain -> InvokeQExp(<chain-to-expression(|rootterm);to-appl> chain, None(), Id("getName"), [])
-  to-appl: expr -> InvokeQExp(ExpressionName(Id("M")), None(), Id("appl"), [expr])
-  to-tuple: expr -> InvokeQExp(ExpressionName(Id("M")), None(), Id("tuple"), [expr])
-  extract-string: expr -> InvokeQExp(ExpressionName(Id("M")), None(), Id("string"), [expr])
-  extract-int: expr -> InvokeQExp(ExpressionName(Id("M")), None(), Id("integer"), [expr])
+  chain-to-expression(|rootterm): [h|t] -> <chain-to-expression(|rootterm); get-subterm(|h)> t
+  chain-to-getname(|rootterm): chain -> java:expr |[ e.getName() ]| where e := <chain-to-expression(|rootterm); to-appl> chain
+  to-appl:        e -> java:expr |[ M.appl(e) ]|
+  to-tuple:       e -> java:expr |[ M.tuple(e) ]|
+  extract-string: e -> java:expr |[ M.string(e) ]|
+  extract-int:    e -> java:expr |[ M.integer(e) ]|
   
-  cfg-pattern-to-condition(|rootterm, bindings) = cfg-pattern-to-condition-chain(|[], rootterm, bindings);condition-chain-to-lazy-and
+  cfg-pattern-to-method: (PropRule(_, pat, _, _), idx) -> java:classb-dec |[
+    private boolean ~method-name(Node node) {
+      ~bstm*:bstmts
+      return true;
+    }
+  ]|
+  with
+    (stmts, guards) := <cfg-pattern-to-guard(|[], "term")> pat
+  ; bstmts := <concat> [
+  	  [java:bstm |[ IStrategoTerm term = node.term; ]|],
+  	  guards,
+      stmts
+    ]
+  ; method-name := $[matchPattern[<int-to-string> idx]]
+  
+  cfg-pattern-to-guard(|var-bindings, term-name): (pat, idx) -> <cfg-pattern-to-guard(|var-bindings, new-name)> pat with new-name := $[[term-name]_[<int-to-string> idx]]
+    
+  cfg-pattern-to-guard(|var-bindings, term-name): At(_, x)       -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
+  cfg-pattern-to-guard(|var-bindings, term-name): PatternVar(v) -> ([java:bstm |[ addNodePatternParent(node, ~term-name); ]|], [java:bstm |[ if(!(~expr)) { return false; } ]|]) where expr := <check-equality-if-bound(|v)> var-bindings
+  cfg-pattern-to-guard(|var-bindings, term-name): PatternVar(v) -> ([], [])
+  cfg-pattern-to-guard(|var-bindings, term-name): PatternLiteral(IntLiteral(x)) -> ([], [])
+  cfg-pattern-to-guard(|var-bindings, term-name): PatternWildcard(_)            -> ([], [])
+  cfg-pattern-to-guard(|var-bindings, term-name): Forward(_, x)       -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
+  cfg-pattern-to-guard(|var-bindings, term-name): Backward(_, x)      -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
+  cfg-pattern-to-guard(|var-bindings, term-name): PropPatternEnd(x)   -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
+  cfg-pattern-to-guard(|var-bindings, term-name): PropPatternStart(x) -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
+  cfg-pattern-to-guard(|var-bindings, term-name): this@PatternTerm(name, args) -> (stmts, guards)
+  with
+    length := <length; int-to-string> args
+  ; name-lit := <to-string-literal> name
+  ; appl-check := java:expr |[ TermUtils.isAppl(~term-name) ]|
+  ; name-check := java:expr |[ M.appl(~term-name).getName().equals(~name-lit) ]|
+  ; len-check  := java:expr |[ ~term-name.getSubtermCount() == ~length ]|
+  ; subpattern-results := <number(id); map(cfg-pattern-to-guard(|var-bindings, term-name))> args
+  ; (sub-stmts, sub-guards) := <unzip; (flatten-list, flatten-list)> subpattern-results
+  ; guards := [
+  	  java:bstm |[ if(!(~appl-check && ~name-check && ~len-check)) { return false; } ]|
+  	| <concat> [<length; range; map(make-declaration(|term-name))> args, sub-guards]
+    ]
+  ; stmts := [
+      java:bstm |[ addNodePatternParent(node, Helpers.getTermNode(~term-name)); ]|
+    | sub-stmts
+  ]   
+  make-declaration(|parent): idx -> java:bstm |[ IStrategoTerm ~child = Helpers.at(~parent, ~idxs); ]|
+  where
+    idxs := <int-to-string> idx
+  ; child := $[[parent]_[idx]]  
+  check-equality-if-bound(|var): bindings -> java:expr |[ to_be_implemented ]| where <elem> (var, bindings)
+  
+  
+  cfg-pattern-to-condition(|rootterm, bindings) = cfg-pattern-to-condition-chain(|[], rootterm, bindings); condition-chain-to-lazy-and
   condition-chain-to-lazy-and: [] -> True()
   condition-chain-to-lazy-and: [h] -> h
   condition-chain-to-lazy-and: [h|t] -> LazyAnd(h, <condition-chain-to-lazy-and> t)
@@ -164,7 +214,7 @@ rules
   pattern-to-subgraphs-internal(|aliases): CFGChainElementEnd() -> []
   
   build-node: var -> java:bstm* |[
-  	Graph x = new Graph(getTermNode(~var), ~var);
+  	Graph x = new Graph(Helpers.getTermNode(~var), ~var);
   ]|
   where 
     x := <to-build-node-name> var

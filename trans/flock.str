@@ -4,6 +4,7 @@ imports
   desugar
   analysis
   normalize
+  dependencies
   pp
 
   libstratego-gpp
@@ -62,6 +63,12 @@ rules // Debugging
       filename := <guarantee-extension(|"normalized.flock")> path
     ; result   := <normalize-module; pp-flock-string> selected
 
+  debug-show-dependency-tracking-java:
+    (selected, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <guarantee-extension(|"deptrack.flock")> path
+    ; result   := <infer-dependencies; pp-flock-string> selected
+    
 rules
 
   flo-to-analysis-java   = desugar-all; module-to-analysis-java
