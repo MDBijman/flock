@@ -125,6 +125,7 @@ context-free priorities
   { Expr.Not
     Expr.Neg } >
   { non-assoc:
+    Expr.TypedUnion
     Expr.Union
     Expr.Intersection
     Expr.Contains

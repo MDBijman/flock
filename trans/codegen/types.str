@@ -22,7 +22,7 @@ strategies
   construct-from(|type): expr -> <construct-from> (type, expr)
   construct-from: (UserTypeParams(name, _), expr) -> java:expr |[ new ~name(~expr) ]| with <is-string> name
   construct-from: (SimpleTypeTerm(), expr) -> java:expr |[ Helpers.toTerm(~expr) ]| // Create specific variant?
-  construct-from: (Map(_, _), expr) -> java |[ new SimpleMap(~expr) ]|
+  construct-from: (Map(_, _), expr) -> java |[ new HashMap(~expr) ]|
   construct-from: (Set(_), expr) -> java |[ SetUtils.create(~expr) ]|
   construct-from: (String(), expr) -> java |[ TermUtils.asString(~expr).get() ]|
   construct-from: (name, expr) -> java:expr |[ new ~name(~expr) ]| with <is-string> name

@@ -15,12 +15,22 @@ strategies
 
 strategies
   
-  add-dependencies-proprule: PropRule(n, p, e, w) -> PropRule(n, <try(bind-pattern-root-to-var)> p, <bottomup(try(annotate-term-literal))> e, <bottomup(try(annotate-term-literal))> w)
+  add-dependencies-proprule: PropRule(n, p, e, w) 
+    -> PropRule(n,
+        <try(bind-pattern-root-to-var)> p,
+        <bottomup(try(annotate-term-literal))> e,
+        <bottomup(try(annotate-term-literal)); bottomup(try(annotate-var-ref))> w)
+  
+  // prop(prev -> pattern) => prop(prev -> rootpattern@pattern)
   
   bind-pattern-root-to-var: Forward(name, pat) -> Forward(name, At("rootpattern", pat))
   bind-pattern-root-to-var: Backward(name, pat) -> Backward(name, At("rootpattern", pat))
   
+  // Name.Constructor(params...) => Name.Constructor(params...){rootpattern}
+  
   annotate-term-literal: term@TypedExprTerm(_, _, _) -> WithOrigin(term, [Position("rootpattern")])
+  
+  annotate-var-ref: ExprExprRef(Ref(n)) -> WithOrigin(ExprExprRef(Ref(n)), [Position(n)])
   
 strategies  
 

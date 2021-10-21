@@ -41,12 +41,12 @@ strategies
   graph-class(|r): _ -> java:type-dec |[
   	public class GraphFactory {
 
-		~create-cfg-method-public
+		~create-cfg-methods-public*
 		~create-cfg-method-intern
   	}
   ]|
   where
-    create-cfg-method-public := <cfg-matcher-method-public> r
+    create-cfg-methods-public* := <cfg-matcher-methods-public> r
   ; create-cfg-method-intern := <cfg-matcher-method-internal> r
   ; flock-node-id := <to-string-literal> "FlockNodeId"
   

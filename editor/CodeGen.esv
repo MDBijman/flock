@@ -1,11 +1,11 @@
 module CodeGen
 
 menus
-  menu: "CodeGen" (source) (openeditor)
-    action: "Show Analysis AST" = debug-show-java-ast
-    action: "Show Analysis code" = debug-show-java
-    action: "Show Property code" = debug-show-props-java
-    action: "Show Strategy code" = debug-show-strategies-java
-    action: "Show Graph Building code" = debug-show-cfggraph-java
-
+  menu: "CodeGen"
+    action: "Show Analysis AST" = debug-show-java-ast (source) (openeditor)
+    action: "Show Analysis code" = debug-show-java (source) (openeditor)
+    action: "Show Property code" = debug-show-props-java (source) (openeditor)
+    action: "Show Strategy code" = debug-show-strategies-java (source) (openeditor)
+    action: "Show Graph Building code" = debug-show-cfggraph-java (source) (openeditor)
+    action: "Build" = compile-all
    

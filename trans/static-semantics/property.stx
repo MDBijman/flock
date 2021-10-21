@@ -77,8 +77,9 @@ rules
     //promotedLType == promoteType(instScope, lType, lName, propName),
     propPatternOk(ruleScope, lattice, propPattern),
     whereScope == scopeOfPropWhere(moduleScope, ruleScope, where),
-    exprT == typeOfExpr(moduleScope, whereScope, expr),
-    typeAssignableTo(exprT, lattice).
+    //lattice == typeOfExpr(moduleScope, whereScope, expr).
+    typeImplicitlyConvertibleTo(typeOfExpr(moduleScope, whereScope, expr), lattice),
+    @expr.expected_type := lattice.
 
   propPatternOk(ruleScope, latticeType, Backward(propCFGNodePattern, var)) :- {patternType}
     @var.ref := var, @var.type := latticeType,
@@ -125,7 +126,8 @@ rules
     thisBindingScope -P-> parentBindingScope,
     exprT == typeOfExpr(moduleScope, parentBindingScope, expr),
     declT == typeOfTypeExpr(moduleScope, new, type) | error $[Declared type not equal to expression type],
-    exprT == declT,
+    typeImplicitlyConvertibleTo(exprT, declT),
+    @expr.expected_type := declT,
     thisBindingScope -> Variable{name} with occurrenceType exprT,
     occurrenceType of Variable{name} in thisBindingScope |-> [_] | error $[The variable [name] is declared more than once.],
     result == scopeOfPropWhereBindings(moduleScope, thisBindingScope, t).

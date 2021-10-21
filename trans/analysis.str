@@ -8,6 +8,36 @@ imports
   pp
   injections/-
 
+signature 
+  sorts
+
+    TYPE
+  
+  constructors
+  
+    NAME   : TYPE
+    TERM   : TYPE
+    INDEX  : TYPE
+    INT    : TYPE
+    STRING : TYPE
+    FLOAT  : TYPE
+    BOOL   : TYPE
+    TUPLE  : list(TYPE) -> TYPE
+    LIST   : TYPE -> TYPE
+    MAP    : TYPE * TYPE -> TYPE
+    SET    : TYPE -> TYPE
+    EMPTY_LITERAL : TYPE
+
+    USERTYPE    : ID * list(string) * scope -> TYPE
+    LATTICE     : ID * list(string) * TYPE * scope -> TYPE
+    CONSTRUCTOR : TYPE * list(TYPE) -> TYPE
+    FUNCTION    : TYPE * list(ID) * list(TYPE) -> TYPE
+    PROPERTY    : TYPE -> TYPE
+    TVAR        : ID -> TYPE
+    INST        : TYPE * list(TYPE) -> TYPE
+
+    OCCURRENCE : TYPE  
+
 rules // Analysis
 
   // single-file analysis
@@ -34,6 +64,34 @@ rules // Editor Services
       a  := <stx-get-ast-analysis> node
     ; ty := <stx-get-ast-type(|a)> node
     ; type' := <strip-annos> ty
+
+  // Normalization can change the AST in cases when the Statix type is not a valid Flock type
+  // In those cases the type must be embedded in the AST through a transformation (such as empty collection literals)
+  get-flock-type: TypedEmptyLiteral(t) -> t
+  get-flock-type: EmptyLiteral() -> <debug; fail> "Cannot get type of empty literal"
+  get-flock-type: node -> <get-type; not(?EMPTY_LITERAL()) < stx-type-to-flock-type + (!node; get-expected-flock-type)> node
+    
+  get-expected-flock-type: node -> <stx-get-ast-property(|a, "expected_type"); stx-type-to-flock-type> node
+    where
+      a := <stx-get-ast-analysis> node
+
+  stx-type-to-flock-type: INST(LATTICE(n, _, _, _), params) -> UserTypeParams(n, <map(stx-type-to-flock-type)> params) where <length; int-gt(|0)> params
+  stx-type-to-flock-type: INST(LATTICE(n, _, _, _), params) -> UserTypeNoParams(n)
+  stx-type-to-flock-type: INST(USERTYPE(n, _, _), params) -> UserTypeParams(n, <map(stx-type-to-flock-type)> params) where <length; int-gt(|0)> params
+  stx-type-to-flock-type: INST(USERTYPE(n, _, _), params) -> UserTypeNoParams(n)
+  stx-type-to-flock-type: LATTICE(n, _, _, _) -> UserTypeNoParams(n)
+  stx-type-to-flock-type: CONSTRUCTOR(inner, params) -> <stx-type-to-flock-type> inner
+  stx-type-to-flock-type: NAME() -> Name()
+  stx-type-to-flock-type: STRING() -> String()
+  stx-type-to-flock-type: TERM() -> SimpleTypeTerm()
+  stx-type-to-flock-type: SET(inner) -> Set(<stx-type-to-flock-type> inner)
+  stx-type-to-flock-type: MAP(k, v) -> Map(<stx-type-to-flock-type> k, <stx-type-to-flock-type> v)
+  stx-type-to-flock-type: t -> <debug; fail> ("Unsupported type", t)
+
+  get-lattice-inner: e -> e'
+  where
+    t := <get-type; ?INST(LATTICE(_, _, _, _), _)> e
+  ; e' := LatticeValue(e)
 
 rules // Debugging
 

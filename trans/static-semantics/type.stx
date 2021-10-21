@@ -138,7 +138,7 @@ rules
   createInstTypeScopeInner(s, [], []).
 
   createInstTypeScopeInner(s, [X|Xs], [T|Ts]) :- 
-    createInstTypeScopeInner(s, Xs, Ts),
+    createInstTypeScopeInner(s, Xs, Ts),	
     s -> TVariable{X} with occurrenceType T.
 
   isListSameType([]).
@@ -226,7 +226,7 @@ rules
     lubScope -P-> moduleScope,
     latticeType == typeOfParam(moduleScope, latticeScope, lubScope, p1),
     latticeType == typeOfParam(moduleScope, latticeScope, lubScope, p2),
-    typeAssignableTo(typeOfExpr(moduleScope, lubScope, e), instType(moduleScope, latticeDefType)),
+    typeImplicitlyConvertibleTo(typeOfExpr(moduleScope, lubScope, e), instType(moduleScope, latticeDefType)),
     latticePartUnique(latticeScope, "lub").
 
   typeOfParam(moduleScope, latticeScope, methodScope, TypedParam(n, t)) = T :-
@@ -278,12 +278,12 @@ rules
 
   latticePartOk(moduleScope, latticeScope, latticeType, Top(top)) :-
     latticePartUnique(latticeScope, "top"),
-    typeAssignableTo(typeOfExpr(moduleScope, moduleScope, top), instType(moduleScope, latticeType)).
+    typeImplicitlyConvertibleTo(typeOfExpr(moduleScope, moduleScope, top), instType(moduleScope, latticeType)).
 
   latticePartOk(moduleScope, latticeScope, latticeType, Bottom(bottom)) :- {exprT}
     latticePartUnique(latticeScope, "bottom"),
     exprT == typeOfExpr(moduleScope, moduleScope, bottom),
-    typeAssignableTo(exprT, instType(moduleScope, latticeType)).
+    typeImplicitlyConvertibleTo(exprT, instType(moduleScope, latticeType)).
 
   typeDefOk(moduleScope, tdef@TypeDefNoParams(name, _, consDefs)) :- {typeDefType}
     @tdef.type := typeDefType,

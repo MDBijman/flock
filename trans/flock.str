@@ -68,7 +68,21 @@ rules // Debugging
     with
       filename := <guarantee-extension(|"deptrack.flock")> path
     ; result   := <infer-dependencies; pp-flock-string> selected
-    
+  
+  debug-normalize-and-compile-java:
+    (selected, _, _, path, project-path) -> (filename, result)
+    with
+      filename := <guarantee-extension(|"norm.flock")> path
+    ; result   := <normalize-module; flo-to-analysis-java; pp-java-string> selected
+  
+  compile-all: t@(Module(module-path, _), _, _, _, _) -> <unzip> [ 
+    <debug-normalize-and-compile-java; ?(p1, f1); !(<make-output-path(|module-name, $[[module-name]])> p1, f1)> t, 
+    <debug-show-strategies-java;       ?(p2, f2); !(<make-output-path(|module-name, $[[module-name]Strategies])> p2, f2)> t,
+    <debug-show-props-java;            ?(p3, f3); !(<make-output-path(|module-name, $[[module-name]Properties])> p3, f3)> t
+  ] where module-name := <base-filename> module-path
+  
+  make-output-path(|module-name, file): base -> $[[<dirname> base]/build/[module-name]/[<guarantee-extension(|"java")> file]]
+  
 rules
 
   flo-to-analysis-java   = desugar-all; module-to-analysis-java

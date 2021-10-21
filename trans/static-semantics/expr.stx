@@ -118,10 +118,11 @@ signature
     typeIsNumeric : TYPE
     typeOfArithmeticTypes : TYPE * TYPE -> TYPE
     typeOfArithmeticOrConcatTypes : TYPE * TYPE -> TYPE
-    typeAssignableTo : TYPE * TYPE
-    typesAssignableTo maps typeAssignableTo(list(*), list(*))
+    typeExplicitlyConvertibleTo : TYPE * TYPE
+    typesImplicitlyConvertibleTo maps typeImplicitlyConvertibleTo(list(*), list(*))
     typeImplicitlyConvertibleTo : TYPE * TYPE
-    typesUnionable : TYPE * TYPE -> TYPE
+    typesUnionable : TYPE * TYPE
+    innerCollectionType : TYPE -> TYPE
 
     typeOfExpr : scope * scope * Expr -> TYPE
     typesOfExprs maps typeOfExpr(*, *, list(*)) = list(*)
@@ -172,35 +173,38 @@ rules
   typeIsNumeric(INT()).
   typeIsNumeric(FLOAT()).
 
-  typeAssignableTo(INT(), FLOAT()).
-  typeAssignableTo(NAME(), STRING()).
-  typeAssignableTo(NAME(), INST(USERTYPE("Name", [], _), [])).
-  typeAssignableTo(STRING(), NAME()).
-  typeAssignableTo(STRING(), INST(USERTYPE("Name", [], _), [])).
-  typeAssignableTo(INST(USERTYPE("Name", [], _), []), STRING()).
-  typeAssignableTo(INST(USERTYPE("Name", [], _), []), NAME()).
-  typeAssignableTo(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) :- typeAssignableTo(a, b).
-  typeAssignableTo(INST(LATTICE(_, _, a, _), _), b) :- typeAssignableTo(a, b).
-  typeAssignableTo(a, INST(LATTICE(_, _, b, _), _)) :- typeAssignableTo(a, b).
-  typeAssignableTo(INST(USERTYPE(_, _, _), _), TERM()).
-  typeAssignableTo(INST(CONSTRUCTOR(_, _), _), TERM()).
-  typeAssignableTo(a, b) :-
-    a == b | error $[The type [a] cannot be assigned to type [b].].
-  
-  typeImplicitlyConvertibleTo(INST(LATTICE(_, _, b, _), _), INST(LATTICE(_, _, a, _), _)) :- a == b.
-  typeImplicitlyConvertibleTo(INST(LATTICE(_, _, b, _), _), a) :- a == b.
-  typeImplicitlyConvertibleTo(b, INST(LATTICE(_, _, a, _), _)) :- a == b.
+  typeImplicitlyConvertibleTo(INT(), FLOAT()).
+  typeImplicitlyConvertibleTo(NAME(), STRING()).
+  typeImplicitlyConvertibleTo(NAME(), INST(USERTYPE("Name", [], _), [])).
+  typeImplicitlyConvertibleTo(STRING(), NAME()).
+  typeImplicitlyConvertibleTo(STRING(), INST(USERTYPE("Name", [], _), [])).
+  typeImplicitlyConvertibleTo(INST(USERTYPE("Name", [], _), []), STRING()).
+  typeImplicitlyConvertibleTo(INST(USERTYPE("Name", [], _), []), NAME()).
+  typeImplicitlyConvertibleTo(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) :- typeImplicitlyConvertibleTo(a, b).
+  typeImplicitlyConvertibleTo(INST(LATTICE(_, _, a, _), _), b) :- typeImplicitlyConvertibleTo(a, b).
+  typeImplicitlyConvertibleTo(a, INST(LATTICE(_, _, b, _), _)) :- typeImplicitlyConvertibleTo(a, b).
   typeImplicitlyConvertibleTo(INST(USERTYPE(_, _, _), _), TERM()).
   typeImplicitlyConvertibleTo(INST(CONSTRUCTOR(_, _), _), TERM()).
+  typeImplicitlyConvertibleTo(TERM(), INST(USERTYPE(_, _, _), _)).
+  typeImplicitlyConvertibleTo(TERM(), INST(CONSTRUCTOR(_, _), _)).
+  typeImplicitlyConvertibleTo(MAP(a, b), MAP(c, d)) :- typeImplicitlyConvertibleTo(a, c), typeImplicitlyConvertibleTo(b, d).
+  typeImplicitlyConvertibleTo(EMPTY_LITERAL(), MAP(_, _)).
+  typeImplicitlyConvertibleTo(EMPTY_LITERAL(), SET(_)).
   typeImplicitlyConvertibleTo(a, b) :- a == b | error $[The type [a] cannot be converted to type [b].]. 
 
-  typesUnionable(SET(a), SET(b)) = SET(a) :- typeImplicitlyConvertibleTo(b, a).
-  typesUnionable(MAP(k1, v1), MAP(k2, v2)) = MAP(k1, v1) :-
+  typeExplicitlyConvertibleTo(a, b) :- typeImplicitlyConvertibleTo(a, b).
+  
+  typesUnionable(SET(a), SET(b)) :- typeImplicitlyConvertibleTo(b, a).
+  typesUnionable(MAP(k1, v1), MAP(k2, v2)) :-
      typeImplicitlyConvertibleTo(k2, k1),
      typeImplicitlyConvertibleTo(v2, v1).
-  typesUnionable(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) = typesUnionable(a, b).
-  typesUnionable(INST(LATTICE(_, _, a, _), _), b) = typesUnionable(a, b).
-  typesUnionable(b, INST(LATTICE(_, _, a, _), _)) = typesUnionable(b, a).
+  typesUnionable(INST(LATTICE(_, _, a, _), _), INST(LATTICE(_, _, b, _), _)) :- typesUnionable(a, b).
+  typesUnionable(INST(LATTICE(_, _, a, _), _), b) :- typesUnionable(a, b).
+  typesUnionable(b, INST(LATTICE(_, _, a, _), _)) :- typesUnionable(b, a).
+
+  innerCollectionType(SET(t)) = SET(t).
+  innerCollectionType(MAP(k, v)) = MAP(k, v).
+  innerCollectionType(INST(LATTICE(_, _, t, _), _)) = innerCollectionType(t).
 
   typeOfExpr(ms, s, e@ExprTerm(consName, exprs)) = T@INST(constructorResultType, exTArgs) :- {consName' constructorType constructorParamTypes tName tParams tScope instScope promotedConstructorParamTypes exprTypes}
     @consName.ref := consName',
@@ -228,7 +232,7 @@ rules
   typeOfExpr(ms, s, e@PropOrAppl(funName, arg)) = T :- {funQueryResult}
     @e.type := T,
     occurrenceType of Function{funName} in s |-> funQueryResult,
-    T == typeOfPropOrAppl(s, funName, arg, funQueryResult).
+    T == typeOfPropOrAppl(s, funName, arg, funQueryResult). 
 
   typeOfExpr(ms, s, e@ExprTuple(first, rest)) = T@TUPLE([firstT | restTs]) :-
     @e.type := T,
@@ -241,7 +245,7 @@ rules
     instScope == createInstTypeScope(new, typeParams, actualArgTs),
     promotedConstructorParamTypes == promoteTypes(instScope, paramTs, "Function application", "unknown location"),
     argTs == typesOfExprs(ms, s, args),
-    typesAssignableTo(argTs, promotedConstructorParamTypes) | error "An unexpected number of arguments was provided.".
+    typesImplicitlyConvertibleTo(argTs, promotedConstructorParamTypes) | error "An unexpected number of arguments was provided.".
 
   typeOfExpr(ms, s, expr@If(c, t, e)) = T :- {cT tT eT}
     @expr.type := T,
@@ -310,29 +314,31 @@ rules
     isListSameType(armTs) | error "All arms of a match expression must have the same type.".
 
   typeOfExpr(ms, s, e@EmptyLiteral()) = T :-
+    @e.type := EMPTY_LITERAL(),
+    T == EMPTY_LITERAL().
+
+  typeOfExpr(ms, s, e@TypedEmptyLiteral(colType)) = T :-
     @e.type := T,
-    //false | error $[emptyliteral [T]],
+    T == typeOfType(ms, s, colType),
     assertSetOrMap(T).
 
-  typeOfExpr(ms, s, e@TypedEmptyLiteral(setType)) = T :-
-    @e.type := T,
-    T == typeOfType(ms, s, setType),
-    assertSetOrMap(T).
-
-  typeOfExpr(ms, s, e@SetLiteral(items)) = SET(T) :-
-    @e.type := SET(T),
-    [T|_] == typesOfExprs(ms, s, items).
+  typeOfExpr(ms, s, e@SetLiteral(items)) = T :- {Ts}
+    @e.type := SET(Ts),
+    @e.expected_type := T,
+    [Ts|_] == typesOfExprs(ms, s, items),
+    SET(Ts) == T.
 
   typeOfExpr(ms, s, e@MapBinding(k, v)) = T@BINDING(Tk, Tv) :-
     @e.type := T,
+    //@e.expected_type := BINDING(Tk, Tv),
     Tk == typeOfExpr(ms, s, k),
     Tv == typeOfExpr(ms, s, v).
-    // Should be: typeImplicitlyConvertibleTo(typeOfExpr(ms, s, v), Tv)
-    // And similar for Tk and k
     
-  typeOfExpr(ms, s, e@MapLiteral(items)) = T@MAP(Tk, Tv) :-
-    @e.type := T,
-    [BINDING(Tk, Tv)|_] == typesOfExprs(ms, s, items).
+  typeOfExpr(ms, s, e@MapLiteral(items)) = T :- { lTk lTv }
+    @e.type := MAP(lTk, lTv),
+    @e.expected_type := T,
+    [BINDING(lTk, lTv)|_] == typesOfExprs(ms, s, items),
+    MAP(lTk, lTv) == T.
 
   typeOfExpr(ms, s, e@SetComp(result, setCompExprs)) = T@SET(setType) :- {setCompScope}
     @e.type := T,
@@ -340,18 +346,29 @@ rules
     setCompExprsOk(ms, setCompScope, setCompExprs),
     T == SET(typeOfExpr(ms, setCompScope, result)). // because this is a set comprehension
 
-  typeOfExpr(ms, s, e@MapComp(result, mapCompExprs)) = T@MAP(kT, vT) :- {mapCompScope}
-    @e.type := T,
+  typeOfExpr(ms, s, e@MapComp(result, mapCompExprs)) = T :- {mapCompScope mTk mTv}
+    @e.type := MAP(mTk, mTv),
+    @e.expected_type := T,
     new mapCompScope, mapCompScope -P-> s,
     mapCompExprsOk(ms, mapCompScope, mapCompExprs),
-    BINDING(kT, vT) == typeOfExpr(ms, mapCompScope, result),
-    T == MAP(kT, vT). // because this is a map comprehension
+    BINDING(mTk, mTv) == typeOfExpr(ms, mapCompScope, result),
+    MAP(mTk, mTv) == T.
 
-  typeOfExpr(ms, s, e@Union(l, r)) = T :- {lT rT}
-    @e.type := T,
+  typeOfExpr(ms, s, e@Difference(l, r)) = T :- {lT rT}
+    @e.type := lT,
+    @e.expected_type := T,
     lT == typeOfExpr(ms, s, l),
     rT == typeOfExpr(ms, s, r),
-    T == typesUnionable(lT, rT) | error $[Cannot union these types].
+    typesUnionable(lT, rT) | error $[Cannot difference these types [lT] with [rT]],
+    lT == T.
+
+  typeOfExpr(ms, s, e@Union(l, r)) = T :- {lT rT}
+    @e.type := lT,
+    @e.expected_type := T,
+    lT == typeOfExpr(ms, s, l),
+    rT == typeOfExpr(ms, s, r),
+    typesUnionable(lT, rT) | error $[Cannot union these types [lT] with [rT]],
+    lT == T.
 
   typeOfExpr(ms, s, e@TypedUnion(l, t, r)) = T :- {lT rT tT}
     @e.type := T,
@@ -359,13 +376,14 @@ rules
     rT == typeOfExpr(ms, s, r),
     tT == typeOfTypeExpr(ms, s, t),
     T == tT,
-    T == typesUnionable(lT, rT) | error $[Cannot union these types].
+    lT == rT | error $[Cannot union these types].
     
   typeOfExpr(ms, s, e@Cast(inner, type)) = T :- {castType exprType}
-    @e.type := T, T == castType,
+    @e.type := T,
+    T == castType,
     castType == typeOfTypeExpr(ms, new, type),
     exprType == typeOfExpr(ms, s, inner),
-    typeAssignableTo(exprType, castType).
+    typeExplicitlyConvertibleTo(exprType, castType).
 
   typeOfExpr(ms, s, e@WithOrigin(inner, origins)) = T :- {innerType}
     @e.type := T, T == innerType,
@@ -387,7 +405,9 @@ rules
 
   typeOfExpr(ms, s, e@ExprExprRef(r@Ref(name))) = T :- {name'}
     @name.ref := name',
-    @e.type := T, @r.type := T, @name.type := T,
+    @e.type := T,
+    @r.type := T,
+    @name.type := T,
     occurrenceType of Variable{name} in s |-> [(_, (Variable{name'}, T))] | error $[The variable [name] could not be resolved uniquely.].
 
   typeOfExpr(ms, s, e@ExprExprRef(r@TypedRef(name, type))) = T :- {name'}
@@ -445,7 +465,7 @@ rules
     instScope == createInstTypeScope(new, typeParams, actualArgTs),
     promotedConstructorParamTypes == promoteTypes(instScope, paramTs, "Function application", "unknown location"),
     occurrenceType of Variable{argName} in s |-> [(_, (Variable{argName'}, argT))] | error $[The variable [argName] could not be resolved uniquely.],
-    typesAssignableTo([argT], promotedConstructorParamTypes).
+    [argT] == promotedConstructorParamTypes.
 
   typeOfPropOrAppl(s, propName, argName, _) = lattice :- {propName' propT argName' argT instScope lName lTParams lType lScope lTArgs}
     @propName.ref := propName',
@@ -457,7 +477,7 @@ rules
     instScope == createInstTypeScope(lScope, lTParams, lTArgs),
    // promotedLType == promoteType(instScope, lType, lName, propName),
     occurrenceType of Variable{argName} in s |-> [(_, (Variable{argName'}, argT))] | error $[The variable [argName] could not be resolved uniquely.],
-    typeAssignableTo(argT, lattice).
+    argT == lattice.
 
   typeOfMatchArm(ms, s, m@MatchArm(pattern, expr), scrutineeType) = T :- {armScope}
     @m.type := T,
@@ -469,14 +489,14 @@ rules
   setCompExprOk(ms, s, SetCompExprSource(SetSource(pattern, expr))) :- {exprT setT}
     exprT == typeOfExpr(ms, s, expr),
     // because this is a source for a set comprehension
-    typeImplicitlyConvertibleTo(exprT, SET(setT)),
+    innerCollectionType(exprT) == SET(setT),
     typeOfPattern(s, pattern) == setT.
 
   setCompExprOk(ms, s, SetCompExprPredicate(predicate)) :- compPredicateOk(ms, s, predicate).
 
   mapCompExprOk(ms, s, MapCompExprSource(MapSource(keyPattern, valuePattern, expr))) :- {exprT kT vT}
     exprT == typeOfExpr(ms, s, expr),
-    typeImplicitlyConvertibleTo(exprT, MAP(kT, vT)),
+    innerCollectionType(exprT) == MAP(kT, vT),
     typeOfPattern(s, keyPattern) == kT,
     typeOfPattern(s, valuePattern) == vT.
   

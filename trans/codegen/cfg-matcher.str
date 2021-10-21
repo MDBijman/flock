@@ -19,15 +19,15 @@ imports
 
 rules
 
-  cfg-matcher-method-public: r -> result
+  cfg-matcher-methods-public: r -> [recursive, once]
   where
     cfg-rules := <filter(?(CFGRule(Root(), _, _)))> r
-  ; switch := <cfg-matcher-switch-internal(empty-block)> cfg-rules
-  ; result := java:method-dec |[
-      public static Graph createCfg(IStrategoTerm term) {
+  ; switch := <cfg-matcher-switch-internal(empty-block, keep-leaves)> cfg-rules
+  ; recursive := java:method-dec |[
+      public static Graph createCfgRecursive(IStrategoTerm term) {
 		Graph result_graph = new Graph();
 		for (IStrategoTerm subterm : term.getSubterms()) {
-			Graph subgraph = createCfg(subterm);
+			Graph subgraph = createCfgRecursive(subterm);
 			if (subgraph.size() != 0) {
 				result_graph.mergeGraph(subgraph);
 			}
@@ -36,6 +36,11 @@ rules
 		~stm:switch
 		
 		return result_graph;
+  	  }
+    ]|
+  ; once := java:method-dec |[
+      public static Graph createCfgOnce(IStrategoTerm term) {
+		return createCfg_inner(term);
   	  }
     ]|
       
@@ -61,17 +66,20 @@ rules
     ]| 
   where
     cfg-rules := <filter(?(CFGRule(NoRoot(), _, _)))> r
-  ; else := <cfg-matcher-switch-internal(throw-exception)> cfg-rules
+  ; else := <cfg-matcher-switch-internal(throw-exception, clear-leaves)> cfg-rules
+  
+  clear-leaves = fail
+  keep-leaves = id
   
   empty-block: _ -> Block([])
   throw-exception: _ -> Block([Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not create CFG node for term '\""), ExpressionName(Id("term"))), StringLiteral("\"'.\""))]))])
   
-  cfg-matcher-switch-internal(make-default): [] -> <make-default>
-  cfg-matcher-switch-internal(make-default): [CFGRule(_, pattern, body)|tail] -> IfElse(condition, then, else)
+  cfg-matcher-switch-internal(make-default, keep-leaves): [] -> <make-default>
+  cfg-matcher-switch-internal(make-default, keep-leaves): [CFGRule(_, pattern, body)|tail] -> IfElse(condition, then, else)
   where
     condition := <cfg-pattern-to-condition(|"term", [])> pattern
-  ; then := <pattern-to-decls(|"term", [])> (pattern, body)
-  ; else := <cfg-matcher-switch-internal(make-default)> tail
+  ; then := <pattern-to-decls(keep-leaves|"term", [])> (pattern, body)
+  ; else := <cfg-matcher-switch-internal(make-default, keep-leaves)> tail
 
   
   cond-same:   (l, r)  -> java:expr |[ ~l == ~r ]|
@@ -109,7 +117,7 @@ rules
   cfg-pattern-to-guard(|var-bindings, term-name): PatternLiteral(IntLiteral(x)) -> ([], [])
   cfg-pattern-to-guard(|var-bindings, term-name): PatternWildcard(_)            -> ([], [])
   cfg-pattern-to-guard(|var-bindings, term-name): Forward(_, x)       -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
-  cfg-pattern-to-guard(|var-bindings, term-name): Backward(_, x)      -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
+  cfg-pattern-to-guard(|var-bindings, term-name): Backward(x, _)      -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
   cfg-pattern-to-guard(|var-bindings, term-name): PropPatternEnd(x)   -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
   cfg-pattern-to-guard(|var-bindings, term-name): PropPatternStart(x) -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
   cfg-pattern-to-guard(|var-bindings, term-name): this@PatternTerm(name, args) -> (stmts, guards)
@@ -174,14 +182,14 @@ rules
   /*
   * Builds the declarations that extract inner variables and aliases from the CFG rules
   */
-  pattern-to-decls(|rootterm, bindings): (pattern, body) -> Block(<concat> [declarations, recursions, linking])
+  pattern-to-decls(keep-leaves|rootterm, bindings): (pattern, body) -> Block(<concat> [declarations, recursions, linking])
   with
     // Create local variable declarations for matched node and pattern variables
     declarations := <pattern-to-decls-internal(|[], rootterm, bindings)> pattern
   	// Recursively create cfg for children
   ; recursions   := <map(pattern-to-subgraphs(|pattern)); concat; uniq> body
   	// Link created cfgs
-  ; linking      := <cfg-body-link> body
+  ; linking      := <cfg-body-link(keep-leaves)> body
   pattern-to-decls(|rootterm, bindings) = pattern-to-decls-internal(|[], rootterm, bindings)
   pattern-to-decls-internal(|chain, rootterm, bindings): At(var, x) -> <concat> [
     <pattern-to-decls-internal(|chain, rootterm, bindings)> PatternVar(var),
@@ -247,11 +255,11 @@ rules
   /*
   * Merges the sub-CFGs and builds the final result
   */
-  cfg-body-link: chains -> <concat> [start-builds, inner-builds, reset-leaves, end-builds]
+  cfg-body-link(keep-leaves): chains -> <concat> [start-builds, inner-builds, reset-leaves, end-builds]
   with
     start-builds  := <retain-all(is-chain-start); map(cfg-body-link-internal); concat> chains
   ; inner-builds  := <retain-all(not(is-chain-start + is-chain-end)); map(cfg-body-link-internal); concat> chains
-  ; reset-leaves  := [java:bstm |[ result_graph.leaves = new HashSet<>(); ]|] 
+  ; reset-leaves  := <keep-leaves < ![] + ![java:bstm |[ result_graph.leaves = new HashSet<>(); ]|]> () 
   ; end-builds    := <retain-all(is-chain-end); map(cfg-body-link-internal); concat> chains
   cfg-body-link-internal: Chain([CFGChainElementStart(), r]) -> <cfg-body-add-to-result> r
   cfg-body-link-internal: Chain([Entry(), r]) -> <cfg-body-add-to-result> r

@@ -40,7 +40,7 @@ strategies
         Node node = Flock.instance.getNode(id);
         if (node == null) {
           Flock.printDebug(~error-message + id.getId());
-          return current;
+          return null;
         }
         Flock.instance.analysisWithName(~property-name).updateResultUntilBoundary(Flock.instance.graph, node);
         
@@ -68,6 +68,13 @@ strategies
 		.stream()
 		.map(n -> Helpers.toTerm(n))
 		.collect(Collectors.toList()));
+  ]|
+
+  type-to-strategy-result(|property-name): t@UserTypeParams("SimpleMap", [k, v]) -> java:bstm |[
+	IStrategoList result = factory
+		.makeList(((Map<IStrategoTerm, IStrategoTerm>) node.getProperty(~property-name).lattice.value())
+				.entrySet().stream().map(n -> factory.makeTuple(Helpers.toTerm(n.getKey()), Helpers.toTerm(n.getValue())))
+				.collect(Collectors.toList()));
   ]|
   
   type-to-strategy-result(|property-name): UserTypeParams(name, []) -> java:bstm |[

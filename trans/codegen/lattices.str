@@ -89,7 +89,7 @@ rules
    ]|
       
   lattice-part-type: LatticePartType(t) -> t
-  access-lattice-value: expr -> java:expr |[ ~expr.value() ]|
+  access-lattice-value: expr -> java:expr |[ ((FlockLattice) ~expr).value() ]|
   access-value-term: (UserTypeParams(type, _), name) -> java:expr |[((~t) ~name).value]| with t := <concat-strings> [type, "Value"]
   
   /*

@@ -30,6 +30,7 @@ signature
     MAP : TYPE * TYPE -> TYPE
     BINDING : TYPE * TYPE -> TYPE
     SET : TYPE -> TYPE
+    EMPTY_LITERAL : TYPE
 
     USERTYPE : ID * list(string) * scope -> TYPE
     LATTICE : ID * list(string) * TYPE * scope -> TYPE
@@ -78,3 +79,4 @@ signature
 rules
   determineOccurrenceOrthonym([(_, (_, orthonym))], _) = orthonym.
   determineOccurrenceOrthonym(_, name) = name.
+  
