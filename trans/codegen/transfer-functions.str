@@ -30,7 +30,8 @@ rules
   transfer-classes(|r) = <filter(?PropRule(_, _, _, _));reverse;number(id);create-all-transfer-classes> r
   create-all-transfer-classes: r -> <concat> [<transfer-instances-class> r, <create-transfer-classes> r]
   
-  set-term-to-node-term = ![LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id("term")), ExpressionName(AmbiguousName(Id("node")), Id("term")))]))]
+  set-term-to-node-term = ![java:bstm |[ IStrategoTerm term = node.virtualTerm.toTermWithoutAnnotations(); ]|]
+  //LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id("term")), ExpressionName(AmbiguousName(Id("node")), Id("term")))]))]
   create-transfer-classes = map(create-transfer-class)
   create-transfer-class: (PropRule(prop, pat, expr, wc), index) -> java:type-dec |[
 	class ~name extends TransferFunction {

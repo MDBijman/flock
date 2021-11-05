@@ -14,10 +14,8 @@ public class replace_node_0_1 extends Strategy {
 	@Override 
 	public IStrategoTerm invoke(Context context, IStrategoTerm newNode, IStrategoTerm oldNode) {
         ITermFactory factory = context.getFactory();
-        Program.beginTime("api@replace");
         Program.log("api", "[replace-node] " + oldNode.toString() + " with " + newNode.toString());
 		Program.instance.replaceNode(context, oldNode, newNode);
-        Program.endTime("api@replace");
 		return newNode;
     }
 }

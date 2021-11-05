@@ -54,6 +54,7 @@ rules
     lattice-name    := <to-lattice-name> name
   ; constructor     := <lattice-constructors> (lattice-name, lattice-value-name)
   ; value-getter    := <lattice-value-getter> inner-type
+  ; equals          := <lattice-equals> lattice-name
   ; to-string       := <lattice-to-string> inner-type
   ; lattice-methods := <map(to-lattice-method(|lattice-name, lattice-value-name, kind))> functions
   where
@@ -64,6 +65,7 @@ rules
       ~*value-field
       ~*constructor
       ~*value-getter
+      ~*equals
       ~*to-string
       ~*lattice-methods
     }
@@ -74,6 +76,7 @@ rules
        ~*value-field
        ~*constructor
        ~*value-getter
+       ~*equals
        ~*to-string
        ~*lattice-methods
      }
@@ -83,6 +86,7 @@ rules
        ~*value-field
        ~*constructor
        ~*value-getter
+       ~*equals
        ~*to-string
        ~*lattice-methods
      }
@@ -127,7 +131,21 @@ rules
 		return this.value;
     }
   ]|] where <not(type-extends-lattice)> value-name
-  lattice-value-getter: value-name -> []
+  lattice-value-getter: lattice-name -> []
+  
+  lattice-equals: lattice-name -> [classb-dec |[
+    @Override
+    public boolean equals(Object other) {
+		if (other == null)
+			return false;
+		if (other == this)
+			return true;
+		if (other.getClass() != this.getClass())
+			return false;
+		~lattice-name rhs = (~lattice-name) other;
+		return this.value.equals(rhs.value);
+    }
+  ]|]
   
   lattice-to-string: value-name -> [classb-dec |[
     @Override

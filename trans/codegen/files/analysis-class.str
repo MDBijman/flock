@@ -38,44 +38,17 @@ strategies
 	  	  super(~prop-name, ~direction-enum);
 	  	}
 	  	
+	  	@Override
 		public void initNodeValue(Node node) {
 		  ~bstm*:value-inits
 		}
 		
-		~classb-dec*:pattern-match-methods
-		
+		@Override
 	    public void initNodeTransferFunction(Node node) {
 	      ~bstm:stmt
 	    }
-		      
-		@Override
-		public void performDataAnalysis(Graph g, Collection<Node> roots, Collection<Node> nodeset, Collection<Node> dirty, float intervalBoundary) {
-			Queue<Node> worklist = new LinkedBlockingQueue<>();
-			HashSet<Node> inWorklist = new HashSet<>();
-			for (Node node : nodeset) {
-				~boundary-check-node
-				worklist.add(node);
-				inWorklist.add(node);
-				initNodeValue(node);
-				initNodeTransferFunction(node);
-			}
-			for (Node node : dirty) {
-				~boundary-check-node
-				worklist.add(node);
-				inWorklist.add(node);
-				initNodeTransferFunction(node);
-			}
-		 	for (Node root : roots) {
-		 		~boundary-check-root
-		 		~root-inits
-		 		this.changedNodes.add(root);
-		 	}
-		 	for (Node node : nodeset) {
-		 		~boundary-check-node
-		 		~nodeset-inits
-		 	}
-		  	while(!worklist.isEmpty()) ~worklist-body
-		}
+
+		~classb-dec*:pattern-match-methods
 	  }
   ]| 
   with
@@ -83,85 +56,14 @@ strategies
   ; prop-name      := <to-string-literal> name
   ; direction-enum := <dir-to-java-enum> direction
   ; superclass := <rules-with-dependencies < !"AnalysisWithDependencies" + !"Analysis"> r
-  ; boundary-check-node := <analysis-boundary-check(|direction)> java:expr |[ node.interval ]|
-  ; boundary-check-root := <analysis-boundary-check(|direction)> java:expr |[ root.interval ]|
-  ; boundary-check-successor := <analysis-boundary-check(|direction)> java:expr |[ successor.interval ]|
-
   ; value-inits := <retain-all(?PropDef(_, UserTypeParams(_, _), _)); map(propdef-to-add)> r
-  ; stmt := <node-factory-switch> r
   ; pattern-match-methods := <get-sorted-proprules; number(cfg-pattern-to-method)> r
-  ; val-setters := <get-newvalue-setters> r
-  ; forward-updaters := <get-forward-updaters> r
-  ; backward-updaters := <get-backward-updaters> r
-  ; worklist-body := Block(<concat> [
-      java:bstm* |[
-	    Node node = worklist.poll();
-	    inWorklist.remove(node);
-	    ~boundary-check-node
-      ]|,
-  	  val-setters,
-  	  [java:bstm |[
-	    for (Node successor : g.childrenOf(node)) {
-	      ~boundary-check-successor
-	      boolean changed = false;
-	      ~*forward-updaters
-	      if (changed && !inWorklist.contains(successor)) {
-	        worklist.add(successor);
-	        inWorklist.add(successor);
-	      }
-	      if (changed) {
-			this.changedNodes.add(successor);
-		  }
-	    } 	  
-  	  ]|],
-	  [java:bstm |[
-	  	for (Node successor : g.parentsOf(node)) {
-	      boolean changed = false;
-	      ~boundary-check-successor
-	      ~*backward-updaters
-	      if (changed && !inWorklist.contains(successor)) {
-	        worklist.add(successor);
-	        inWorklist.add(successor);
-	      }
-	      if (changed) {
-			this.changedNodes.add(successor);
-		  }
-	    }
-  	  ]|]
-    ])
-  ; root-inits    := <lift-single> Block(<retain-all(?PropDef(_, _, _)); map(propdef-to-init)> r)
-  ; nodeset-inits := <lift-single> Block(<retain-all(?PropDef(_, _, _)); map(propdef-to-nodeset-init(|direction))> r)
- 
-  propdef-to-nodeset-init(|direction): PropDef(n, _, _) -> java:bstm |[
-	  {
-		FlockLattice init = node.getProperty(~name).lattice;
-		for (Node pred : ~predecessors) {
-		  FlockLattice live_o = pred.getProperty(~name).transfer.eval(pred);
-		  init = init.lub(live_o);
-		}
-		node.getProperty(~name).lattice = init;
-		this.changedNodes.add(node);
-	  }   	
-    ]|
-  where
-    name := <to-string-literal> n
-  ; predecessors := <?"forward" < !|[ g.parentsOf(node) ]| + !|[ g.childrenOf(node) ]|> direction
-
-  get-newvalue-setters = filter(?PropDef(_, _, _)); map(propdef-to-newvalue)
-
-  propdef-to-newvalue: PropDef(name, _, _) -> java:bstm |[ FlockLattice ~new-name = node.getProperty(~prop-name).transfer.eval(node); ]|
-  where
-    new-name := $[[name]_n]
-  ; prop-name := <to-string-literal> name
+  ; stmt := <node-factory-switch> r
  
   propdef-to-add: PropDef(n, UserTypeParams(tname, _), _) -> java:bstm |[
   	node.addProperty(~name, ~tname.bottom());
   ]| where name := <to-string-literal> n
                       
-  propdef-to-init: PropDef(n, _, _) -> java:bstm |[
-  	root.getProperty(~name).lattice = root.getProperty(~name).init.eval(root);
-  ]| where name := <to-string-literal> n
-
   lift-single: Block([stmt]) -> stmt
   lift-single: Block(s) -> <id>
   
@@ -175,30 +77,10 @@ strategies
   dir-to-java-enum: "forward"  -> java:expr |[ Direction.FORWARD ]|
   dir-to-java-enum: "backward" -> java:expr |[ Direction.BACKWARD ]|
   
-  get-forward-updaters  = get-forwards;  map(name-to-updater); concat
-  get-backward-updaters = get-backwards; map(name-to-updater); concat
-  
-  get-backwards = filter(?PropRule(_, Backward(_, _), _, _)); map(get-name); uniq
-  get-forwards  = filter(?PropRule(_, Forward(_, _), _, _));  map(get-name); uniq
   get-name: PropRule(name, _, _, _) -> name
-  
-  name-to-updater: name -> java:bstm* |[
-  	FlockLattice ~old-name = successor.getProperty(~prop-name).lattice;
-	if (~new-name.nleq(~old-name)) {
-		successor.getProperty(~prop-name).lattice = ~old-name.lub(~new-name);
-		changed = true;
-	}	  
-  ]|
-  where
-    old-name := $[[name]_o]
-  ; new-name := $[[name]_n]
-  ; prop-name := <to-string-literal> name
   
   to-new-name = append-string(|"_n")
   to-old-name = append-string(|"_o")
-
-  analysis-boundary-check(|dir): e -> java:bstm |[ if (e < intervalBoundary) continue; ]| where <equal(|dir)> "backward"
-  analysis-boundary-check(|dir): e -> java:bstm |[ if (e > intervalBoundary) continue; ]| where <equal(|dir)> "forward"
   
   analysis-name: (n, _) -> n
   analysis-direction: (_, d) -> d

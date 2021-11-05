@@ -24,10 +24,10 @@ rules
     cfg-rules := <filter(?(CFGRule(Root(), _, _)))> r
   ; switch := <cfg-matcher-switch-internal(empty-block, keep-leaves)> cfg-rules
   ; recursive := java:method-dec |[
-      public static Graph createCfgRecursive(IStrategoTerm term) {
+      public static Graph createCfgRecursive(TermTree tree, IStrategoTerm term) {
 		Graph result_graph = new Graph();
 		for (IStrategoTerm subterm : term.getSubterms()) {
-			Graph subgraph = createCfgRecursive(subterm);
+			Graph subgraph = createCfgRecursive(tree, subterm);
 			if (subgraph.size() != 0) {
 				result_graph.mergeGraph(subgraph);
 			}
@@ -39,25 +39,27 @@ rules
   	  }
     ]|
   ; once := java:method-dec |[
-      public static Graph createCfgOnce(IStrategoTerm term) {
-		return createCfg_inner(term);
+      public static Graph createCfgOnce(TermTree tree, IStrategoTerm term) {
+		return createCfg_inner(tree, term);
   	  }
     ]|
       
   cfg-matcher-method-internal: r -> java:method-dec |[
-      private static Graph createCfg_inner(IStrategoTerm term) {
+      private static Graph createCfg_inner(TermTree tree, IStrategoTerm term) {
 		Graph result_graph = new Graph();
 	  	if (TermUtils.isList(term)) {
 			IStrategoList list = M.list(term);
 			if (list.isEmpty()) {
 				return new Graph();
 			}
-			result_graph.mergeGraph(createCfg_inner(list.head()));
+			result_graph.mergeGraph(createCfg_inner(tree, list.head()));
 			list = list.tail();
 			while (!list.isEmpty()) {
-				Graph new_result = createCfg_inner(list.head());
-				result_graph.attachChildGraph(result_graph.leaves, new_result);
-				result_graph.leaves = new_result.leaves;
+				Graph new_result = createCfg_inner(tree, list.head());
+				result_graph.mergeGraph(result_graph.leaves, new_result);
+				if (new_result.size() > 0) {
+					result_graph.leaves = new_result.leaves;
+				}
 				list = list.tail();
 			}
 		} else ~else
@@ -103,7 +105,7 @@ rules
   with
     (stmts, guards) := <cfg-pattern-to-guard(|[], "term")> pat
   ; bstmts := <concat> [
-  	  [java:bstm |[ IStrategoTerm term = node.term; ]|],
+  	  [java:bstm |[ ITerm term = node.virtualTerm; ]|],
   	  guards,
       stmts
     ]
@@ -112,7 +114,7 @@ rules
   cfg-pattern-to-guard(|var-bindings, term-name): (pat, idx) -> <cfg-pattern-to-guard(|var-bindings, new-name)> pat with new-name := $[[term-name]_[<int-to-string> idx]]
     
   cfg-pattern-to-guard(|var-bindings, term-name): At(_, x)       -> <cfg-pattern-to-guard(|var-bindings, term-name)> x
-  cfg-pattern-to-guard(|var-bindings, term-name): PatternVar(v) -> ([java:bstm |[ addNodePatternParent(node, ~term-name); ]|], [java:bstm |[ if(!(~expr)) { return false; } ]|]) where expr := <check-equality-if-bound(|v)> var-bindings
+  cfg-pattern-to-guard(|var-bindings, term-name): PatternVar(v) -> ([java:bstm |[ if(!(~expr)) { return false; } ]|]) where expr := <check-equality-if-bound(|v)> var-bindings
   cfg-pattern-to-guard(|var-bindings, term-name): PatternVar(v) -> ([], [])
   cfg-pattern-to-guard(|var-bindings, term-name): PatternLiteral(IntLiteral(x)) -> ([], [])
   cfg-pattern-to-guard(|var-bindings, term-name): PatternWildcard(_)            -> ([], [])
@@ -124,20 +126,18 @@ rules
   with
     length := <length; int-to-string> args
   ; name-lit := <to-string-literal> name
-  ; appl-check := java:expr |[ TermUtils.isAppl(~term-name) ]|
-  ; name-check := java:expr |[ M.appl(~term-name).getName().equals(~name-lit) ]|
-  ; len-check  := java:expr |[ ~term-name.getSubtermCount() == ~length ]|
+  ; appl-check := java:expr |[ ~term-name.isAppl() ]|
+  ; name-check := java:expr |[ ((ApplTerm) ~term-name).getConstructor().equals(~name-lit) ]|
+  ; len-check  := java:expr |[ ~term-name.childrenCount() == ~length ]|
   ; subpattern-results := <number(id); map(cfg-pattern-to-guard(|var-bindings, term-name))> args
   ; (sub-stmts, sub-guards) := <unzip; (flatten-list, flatten-list)> subpattern-results
   ; guards := [
   	  java:bstm |[ if(!(~appl-check && ~name-check && ~len-check)) { return false; } ]|
   	| <concat> [<length; range; map(make-declaration(|term-name))> args, sub-guards]
     ]
-  ; stmts := [
-      java:bstm |[ addNodePatternParent(node, Helpers.getTermNode(~term-name)); ]|
-    | sub-stmts
-  ]   
-  make-declaration(|parent): idx -> java:bstm |[ IStrategoTerm ~child = Helpers.at(~parent, ~idxs); ]|
+  ; stmts := sub-stmts
+  
+  make-declaration(|parent): idx -> java:bstm |[ ITerm ~child = ~parent.childAt(~idxs); ]|
   where
     idxs := <int-to-string> idx
   ; child := $[[parent]_[idx]]  
@@ -222,13 +222,13 @@ rules
   pattern-to-subgraphs-internal(|aliases): CFGChainElementEnd() -> []
   
   build-node: var -> java:bstm* |[
-  	Graph x = new Graph(Helpers.getTermNode(~var), ~var);
+  	Graph x = new Graph(Helpers.getTermNode(~var), tree.nodeById(Helpers.getTermId(~var)));
   ]|
   where 
     x := <to-build-node-name> var
   refer-node: (alias, var) -> <concat> [<build-node> var, [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-build-node-name> alias)), ExpressionName(Id(<to-build-node-name> var)))]))]]
   rec-node: var -> java:bstm* |[ 
-    Graph ~x = createCfg_inner(~var);
+    Graph ~x = createCfg_inner(tree, ~var);
   ]|
   where
     x := <to-rec-node-name> var
@@ -272,7 +272,7 @@ rules
   ]|] where x := <to-graph-name> r
 
   cfg-body-link-internal: Chain([a, b]) -> [java:bstm |[
-    result_graph.attachChildGraph(~leaves, ~children);
+    result_graph.mergeGraph(~leaves, ~children);
   ]|]
   where
     children := <to-graph-name> b

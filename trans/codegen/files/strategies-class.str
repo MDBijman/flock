@@ -36,7 +36,7 @@ strategies
       @Override
 	  public IStrategoTerm invoke(Context context, IStrategoTerm current) {
         ITermFactory factory = context.getFactory();
-        CfgNodeId id = new CfgNodeId(((IStrategoInt) current).intValue());
+        TermId id = new TermId(((IStrategoInt) current).intValue());
         Node node = Flock.instance.getNode(id);
         if (node == null) {
           Flock.printDebug(~error-message + id.getId());
