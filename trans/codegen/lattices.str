@@ -56,6 +56,7 @@ rules
   ; value-getter    := <lattice-value-getter> inner-type
   ; equals          := <lattice-equals> lattice-name
   ; to-string       := <lattice-to-string> inner-type
+  ; copy            := <lattice-copy> lattice-name
   ; lattice-methods := <map(to-lattice-method(|lattice-name, lattice-value-name, kind))> functions
   where
     superclass-name := <lattice-type-to-superclass> inner-type
@@ -68,6 +69,7 @@ rules
       ~*equals
       ~*to-string
       ~*lattice-methods
+      ~*copy
     }
   ]|
   <+ interface-name  := <lattice-kind-to-interface> kind
@@ -79,6 +81,7 @@ rules
        ~*equals
        ~*to-string
        ~*lattice-methods
+       ~*copy
      }
    ]|
   <+ class := java:type-dec |[
@@ -89,6 +92,7 @@ rules
        ~*equals
        ~*to-string
        ~*lattice-methods
+       ~*copy
      }
    ]|
       
@@ -155,6 +159,14 @@ rules
   ]|] where <not(type-extends-lattice)> value-name
   lattice-to-string: value-name -> []
   
+  lattice-copy: lattice-name -> [classb-dec |[
+    @Override
+    public FlockLattice copy() {
+		return new ~lattice-name(this);
+    }
+  ]|]
+
+
   /*
   * The inner lattice type declaration does not map to a method
   */
@@ -202,11 +214,14 @@ rules
   */
   to-lattice-method(|lattice-name, lattice-value-name, kind): Lub(TypedParam(l, lt), TypedParam(r, rt), expr) -> java:method-dec |[
     @Override
-    public FlockLattice lub(FlockLattice other) {
+    public boolean lub(FlockLattice other) {
       ~*decls-l
       ~*decls-r
       ~bstm*:stmts
-      return ~res;
+      ~lattice-name _res_lat = ~res;
+      boolean _is_changed = !this.equals(_res_lat);
+      this.value = _res_lat.value;
+      return _is_changed;
     }
   ]|
   where <requires-statements> expr
@@ -217,10 +232,13 @@ rules
   
   to-lattice-method(|lattice-name, lattice-value-name, kind): Lub(TypedParam(l, lt), TypedParam(r, rt), expr) -> java:method-dec |[
     @Override
-    public FlockLattice lub(FlockLattice other) {
+    public boolean lub(FlockLattice other) {
       ~*decls-l
       ~*decls-r
-      return ~java-expr;
+       ~lattice-name _res_lat = ~java-expr;
+      boolean _is_changed = !this.equals(_res_lat);
+      this.value = _res_lat.value;
+      return _is_changed;
     }
   ]|
   with
@@ -232,12 +250,12 @@ rules
   /*
   * Lattice method: Least Upper Bound
   */
-  to-lattice-method(|lattice-name, lattice-value-name, kind): Lub(l, r, expr) -> <fail>
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Lub(l, r, expr) -> <fail> "Not implemented"
   
   /*
   * Lattice method: Greatest Lower Bound
   */
-  to-lattice-method(|lattice-name, lattice-value-name, kind): Glb(l, r, expr) -> <fail>
+  to-lattice-method(|lattice-name, lattice-value-name, kind): Glb(l, r, expr) -> <fail> "Not implemented"
 
 
   /*

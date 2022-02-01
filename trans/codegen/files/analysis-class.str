@@ -33,7 +33,7 @@ strategies
     ]
 
   main-class(|r): module-name -> java:type-dec |[
-	  public class FlowAnalysis extends ~superclass {
+	  public class FlowAnalysis extends Analysis {
 	  	public FlowAnalysis() {
 	  	  super(~prop-name, ~direction-enum);
 	  	}
@@ -55,7 +55,6 @@ strategies
     (name, direction) := <rules-to-analysis-term> r
   ; prop-name      := <to-string-literal> name
   ; direction-enum := <dir-to-java-enum> direction
-  ; superclass := <rules-with-dependencies < !"AnalysisWithDependencies" + !"Analysis"> r
   ; value-inits := <retain-all(?PropDef(_, UserTypeParams(_, _), _)); map(propdef-to-add)> r
   ; pattern-match-methods := <get-sorted-proprules; number(cfg-pattern-to-method)> r
   ; stmt := <node-factory-switch> r
@@ -70,9 +69,6 @@ strategies
   rules-to-analysis-term: r -> <getfirst(rule-to-prop-dir)> r
   rule-to-prop-dir: PropRule(name, Backward(_, _), _, _) -> (name, "backward")
   rule-to-prop-dir: PropRule(name, Forward(_, _), _, _) -> (name, "forward")
-  
-  rules-with-dependencies: r -> <getfirst(propdef-with-dependencies)> r
-  propdef-with-dependencies: PropDef(_, _, WithDependencies()) -> <id>
   
   dir-to-java-enum: "forward"  -> java:expr |[ Direction.FORWARD ]|
   dir-to-java-enum: "backward" -> java:expr |[ Direction.BACKWARD ]|

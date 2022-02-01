@@ -35,22 +35,27 @@ rules
   create-transfer-classes = map(create-transfer-class)
   create-transfer-class: (PropRule(prop, pat, expr, wc), index) -> java:type-dec |[
 	class ~name extends TransferFunction {
+		@SuppressWarnings({ ~unchecked_str, ~rawtypes_str, ~unused_str })
 		@Override
-		public FlockLattice eval(Node node) {
+		public boolean eval(FlockLattice res, Node node) {
 			~bstm*:statements
 		}
 	}
   ]|
   where
-    name := <get-transfer-id> index
+    unchecked_str := <to-string-literal> "unchecked"
+  ; rawtypes_str := <to-string-literal> "rawtypes"
+  ; unused_str := <to-string-literal> "unused"
+  ; name := <get-transfer-id> index
   ; pattern-vars := <pattern-to-vars> pat
   ; where-vars := <where-to-code> wc
+  ; result-expr := <transform-expr> expr
   ; statements := <concat> [
   	  <set-term-to-node-term>,
   	  pattern-vars,
   	  where-vars,
   	  <expr-to-stmts> expr,
-  	  [Return(<transform-expr> expr)]
+  	  [java:bstm |[ return res.lub(~result-expr); ]|]
   	]
   
   pattern-to-vars: Backward(p, name) -> <concat> [<name-to-node> name, <pattern-to-decls(|"term", [])> p]
@@ -78,7 +83,6 @@ rules
     ; java-type := <type-to-java-type> type
     ; result-expr := <simple-cast(|type)> result-name
 
-    
   binding-to-code: TypedBinding(var, type, expr) -> [java:bstm |[ ~java-type ~var = ~java-expr; ]|]
     with
       java-type := <type-to-java-type> type

@@ -39,9 +39,7 @@ strategies
   lattice-type-to-superclass: Map(_, _) -> "SimpleMap"
   
   lattice-kind-to-interface: Value() -> "FlockValueLattice"
-  lattice-kind-to-interface: ValueWithDependencies() -> "FlockValueLattice"
   lattice-kind-to-interface: Collection() -> "FlockCollectionLattice"
-  lattice-kind-to-interface: CollectionWithDependencies() -> "FlockCollectionLattice"
   lattice-kind-to-interface: None() -> "FlockLattice"
     
   type-extends-lattice: Map(_, _) -> <id>

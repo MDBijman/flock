@@ -77,7 +77,7 @@ rules
   transform-expr(|bindings): FalseLiteral() -> False()
   
   // Non-sets
-  transform-expr(|bindings): WithOrigin(expr, vars) -> <transform-expr(|bindings); add-origins(|vars)> expr
+  transform-expr(|bindings): WithOrigin(expr, vars) -> <fail> "Not supported"
   transform-expr(|bindings): Cast(expr, type) -> <transform-expr(|bindings); construct-from(|type)> expr
   transform-expr(|bindings): ExprExprRef(x) -> <transform-expr(|bindings)> x
   transform-expr(|bindings): Ref(name) -> java:expr |[ ~name ]|

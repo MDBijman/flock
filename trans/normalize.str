@@ -7,7 +7,6 @@ imports
   
   codegen/util
 
-
 strategies
 
   normalize-module =
@@ -102,6 +101,13 @@ strategies
   hoist-in-where-inner = !(<id>, []); thread-bottomup_(hoist-into-binding); ?(t, bs); ![bs, [t]]; concat
 
   should-hoist = ?SetComp(_, _) + ?SetLiteral(_) + ?MapComp(_, _) + ?MapLiteral(_) + ?Union(_, _) + ?TypedUnion(_, _, _) + ?EmptyLiteral()
+  
+  /*
+  * We hoist bindings and attach an annotation here
+  * So that the compiler can mutate the variable with e.g. unionInplace
+  * To avoid copying into a new collection
+  * Since the variable is single-use
+  */
   hoist-into-binding: (expr{t*}, bindings) -> (ExprExprRef(Ref(newName)), <concat> [bindings, [newBinding]])
   where
     <should-hoist> expr

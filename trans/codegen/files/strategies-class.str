@@ -27,9 +27,9 @@ strategies
   ]|
   with 
     imports := <all-imports>
-  ; inners := <retain-all(propdef-to-strategy-class)> r 
+  ; inners := <retain-all(propdef-to-strategy-classes); flatten-list> r 
   
-  propdef-to-strategy-class: PropDef(name, type, _) -> classb-dec |[
+  propdef-to-strategy-classes: PropDef(name, UserTypeParams("MaySet", [p]), _) -> classb-dec |[
     public static class ~class-name extends Strategy {
       public static ~class-name instance = new ~class-name();
        
@@ -42,9 +42,12 @@ strategies
           Flock.printDebug(~error-message + id.getId());
           return null;
         }
-        Flock.instance.analysisWithName(~property-name).updateResultUntilBoundary(Flock.instance.graph, node);
+        Flock.instance.analysisWithName(~property-name).performDataAnalysis(Flock.instance.graph, Flock.instance.graph_scss, node);
         
-		~result-stmt
+		IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
+			.stream()
+			.map(n -> Helpers.toTerm(n))
+			.collect(Collectors.toList()));
 
 		return result;
       }
@@ -54,32 +57,120 @@ strategies
     class-name := <concat-strings> ["get_", name, "_0_0"]
   ; error-message := <to-string-literal> "CfgNode is null with id "
   ; property-name := <to-string-literal> name
-  ; result-stmt := <type-to-strategy-result(|property-name)> type
   
-  type-to-strategy-result(|property-name): t@UserTypeParams("MaySet", [p]) -> java:bstm |[
-	IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
-		.stream()
-		.map(n -> Helpers.toTerm(n))
-		.collect(Collectors.toList()));
-  ]|
+  propdef-to-strategy-classes: PropDef(name, UserTypeParams("MustSet", [p]), _) -> classb-dec |[
+    public static class ~class-name extends Strategy {
+      public static ~class-name instance = new ~class-name();
+       
+      @Override
+	  public IStrategoTerm invoke(Context context, IStrategoTerm current) {
+        ITermFactory factory = context.getFactory();
+        TermId id = new TermId(((IStrategoInt) current).intValue());
+        Node node = Flock.instance.getNode(id);
+        if (node == null) {
+          Flock.printDebug(~error-message + id.getId());
+          return null;
+        }
+        Flock.instance.analysisWithName(~property-name).performDataAnalysis(Flock.instance.graph, Flock.instance.graph_scss, node);
+        
+		IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
+			.stream()
+			.map(n -> Helpers.toTerm(n))
+			.collect(Collectors.toList()));
 
-  type-to-strategy-result(|property-name): t@UserTypeParams("MustSet", [p]) -> java:bstm |[
-	IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
-		.stream()
-		.map(n -> Helpers.toTerm(n))
-		.collect(Collectors.toList()));
+		return result;
+      }
+    }
   ]|
-
-  type-to-strategy-result(|property-name): t@UserTypeParams("SimpleMap", [k, v]) -> java:bstm |[
-	IStrategoList result = factory
-		.makeList(((Map<IStrategoTerm, IStrategoTerm>) node.getProperty(~property-name).lattice.value())
-				.entrySet().stream().map(n -> factory.makeTuple(Helpers.toTerm(n.getKey()), Helpers.toTerm(n.getValue())))
-				.collect(Collectors.toList()));
-  ]|
+  with
+    class-name := <concat-strings> ["get_", name, "_0_0"]
+  ; error-message := <to-string-literal> "CfgNode is null with id "
+  ; property-name := <to-string-literal> name
   
-  type-to-strategy-result(|property-name): UserTypeParams(name, []) -> java:bstm |[
-     IStrategoTerm result = ((FlockValue) node.getProperty(~property-name).lattice.value()).toTerm(); 
+  propdef-to-strategy-classes: PropDef(name, UserTypeParams("SimpleMap", [k, v]), _) -> classb-dec* |[
+    public static class ~class-name extends Strategy {
+      public static ~class-name instance = new ~class-name();
+       
+      @Override
+	  public IStrategoTerm invoke(Context context, IStrategoTerm current) {
+        ITermFactory factory = context.getFactory();
+        TermId id = new TermId(((IStrategoInt) current).intValue());
+        Node node = Flock.instance.getNode(id);
+        if (node == null) {
+          Flock.printDebug(~error-message + id.getId());
+          return null;
+        }
+        Flock.instance.analysisWithName(~property-name).performDataAnalysis(Flock.instance.graph, Flock.instance.graph_scss, node);
+        
+		IStrategoList result = factory
+			.makeList(((Map<IStrategoTerm, IStrategoTerm>) node.getProperty(~property-name).lattice.value())
+			.entrySet().stream().map(n -> factory.makeTuple(Helpers.toTerm(n.getKey()), Helpers.toTerm(n.getValue())))
+			.collect(Collectors.toList()));
+
+		return result;
+      }
+    }
+    
+    public static class ~class-name2 extends Strategy {
+      public static ~class-name2 instance = new ~class-name2();
+       
+      @Override
+	  public IStrategoTerm invoke(Context context, IStrategoTerm current, IStrategoTerm key) {
+        ITermFactory factory = context.getFactory();
+        TermId id = new TermId(((IStrategoInt) current).intValue());
+        Node node = Flock.instance.getNode(id);
+        if (node == null) {
+          Flock.printDebug(~error-message + id.getId());
+          return null;
+        }
+        Flock.instance.analysisWithName(~property-name).performDataAnalysis(Flock.instance.graph, Flock.instance.graph_scss, node);
+        
+		Map<IStrategoTerm, Object> values = (Map<IStrategoTerm, Object>) node
+				.getProperty(~property-name).lattice.value();
+
+		Object value = values.get(key);
+
+		if (value == null) {
+			return null;
+		}
+
+		IStrategoTerm asTerm = Helpers.toTerm(value);
+
+		return asTerm;
+      }
+    }
   ]|
+  with
+    class-name := <concat-strings> ["get_", name, "_0_0"]
+  ; class-name2 := <concat-strings> ["get_", name, "_0_1"]
+  ; error-message := <to-string-literal> "CfgNode is null with id "
+  ; property-name := <to-string-literal> name
+  
+  propdef-to-strategy-classes: PropDef(name, _, _) -> classb-dec |[
+    public static class ~class-name extends Strategy {
+      public static ~class-name instance = new ~class-name();
+       
+      @Override
+	  public IStrategoTerm invoke(Context context, IStrategoTerm current) {
+        ITermFactory factory = context.getFactory();
+        TermId id = new TermId(((IStrategoInt) current).intValue());
+        Node node = Flock.instance.getNode(id);
+        if (node == null) {
+          Flock.printDebug(~error-message + id.getId());
+          return null;
+        }
+        Flock.instance.analysisWithName(~property-name).performDataAnalysis(Flock.instance.graph, Flock.instance.graph_scss, node);
+        
+		IStrategoTerm result = ((FlockValue) node.getProperty(~property-name).lattice.value()).toTerm(); 
+
+		return result;
+      }
+    }
+  ]|
+  with
+    class-name := <concat-strings> ["get_", name, "_0_0"]
+  ; error-message := <to-string-literal> "CfgNode is null with id "
+  ; property-name := <to-string-literal> name 
   
   
   
