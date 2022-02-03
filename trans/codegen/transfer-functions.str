@@ -27,17 +27,16 @@ rules
   transfer-type = !ClassType(<transfer-type-id>, None())
   to-transfer-name = append-string(|<transfer-type-name>)
   
-  transfer-classes(|r) = <filter(?PropRule(_, _, _, _));reverse;number(id);create-all-transfer-classes> r
-  create-all-transfer-classes: r -> <concat> [<transfer-instances-class> r, <create-transfer-classes> r]
+  transfer-classes(|r) = <filter(?PropRule(_, _, _, _)); reverse; number(id); create-all-transfer-classes> r
+  create-all-transfer-classes: numbered-rules -> <concat> [<transfer-instances-class> numbered-rules, <create-transfer-classes> numbered-rules]
   
   set-term-to-node-term = ![java:bstm |[ IStrategoTerm term = node.virtualTerm.toTermWithoutAnnotations(); ]|]
-  //LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id("term")), ExpressionName(AmbiguousName(Id("node")), Id("term")))]))]
   create-transfer-classes = map(create-transfer-class)
   create-transfer-class: (PropRule(prop, pat, expr, wc), index) -> java:type-dec |[
 	class ~name extends TransferFunction {
 		@SuppressWarnings({ ~unchecked_str, ~rawtypes_str, ~unused_str })
 		@Override
-		public boolean eval(FlockLattice res, Node node) {
+		public boolean eval(Analysis.Direction direction, FlockLattice res, Node node) {
 			~bstm*:statements
 		}
 	}
@@ -46,16 +45,15 @@ rules
     unchecked_str := <to-string-literal> "unchecked"
   ; rawtypes_str := <to-string-literal> "rawtypes"
   ; unused_str := <to-string-literal> "unused"
-  ; name := <get-transfer-id> index
+  ; name         := <get-transfer-id> index
   ; pattern-vars := <pattern-to-vars> pat
-  ; where-vars := <where-to-code> wc
-  ; result-expr := <transform-expr> expr
+  ; where-vars   := <where-to-code> wc
+  ; stmts := <transform-result-expr(|"res")> expr
   ; statements := <concat> [
   	  <set-term-to-node-term>,
   	  pattern-vars,
   	  where-vars,
-  	  <expr-to-stmts> expr,
-  	  [java:bstm |[ return res.lub(~result-expr); ]|]
+  	  stmts
   	]
   
   pattern-to-vars: Backward(p, name) -> <concat> [<name-to-node> name, <pattern-to-decls(|"term", [])> p]
@@ -63,40 +61,34 @@ rules
   pattern-to-vars: PropPatternStart(p) -> <pattern-to-decls(|[], "term")> p
   pattern-to-vars: PropPatternEnd(p) -> <pattern-to-decls(|[], "term")> p
   
-  node-type-name = !"Node"
-  node-type-id = !Id(<node-type-name>)
-  node-type = !ClassType(<node-type-id>, None())
-  name-to-node: name -> [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(name)), ExpressionName(Id("node")))]))]
+  name-to-node: name -> [LocVarDeclStm(LocalVarDecl([], ClassType(Id("Node"), None()), [VariableDeclInit(VariableDecl(Id(name)), ExpressionName(Id("node")))]))]
   
   where-to-code: NoWhereClause() -> []
   where-to-code: WhereClause(bindings) -> <map(binding-to-code); concat> bindings
-  binding-to-code: Binding(var, expr) -> <fail> with <debug> "Bindings must be typed"
-
   binding-to-code: t@TypedBinding(var, type, expr) -> [
       stmt*,
       java:bstm |[ ~java-type ~var = ~result-expr; ]|
     ]
-    where 
-      <requires-statements> expr
     with
-      (result-name, stmt*) := <expr-to-stmts> expr
+      (result-name, stmt*) := <transform-toplevel-expr> expr
     ; java-type := <type-to-java-type> type
     ; result-expr := <simple-cast(|type)> result-name
 
-  binding-to-code: TypedBinding(var, type, expr) -> [java:bstm |[ ~java-type ~var = ~java-expr; ]|]
-    with
-      java-type := <type-to-java-type> type
-    ; java-expr := <transform-expr; simple-cast(|type)> expr
-  
-  transfer-instances-class: r -> [ClassDeclaration(
+  transfer-instances-class: numbered-rules -> [ClassDeclaration(
       []
     , Id("TransferFunctions")
     , None()
     , None()
     , None()
-    , <map(create-transfer-field)> r
+    , <map(create-transfer-field)> numbered-rules
     )]
   create-transfer-field: (_, index) -> FieldDecl([Public(), Static()], ClassType(Id("TransferFunction"), None()), [ VariableDeclInit(VariableDecl(<get-transfer-id> index), NewInstance(None(), [], <get-transfer-id> index, [], None(), []))])
   
   get-transfer-id: index -> <concat-strings> ["TransferFunction", <int-to-string> index]
   get-transfer-function: index -> ExpressionName(AmbiguousName(Id("TransferFunctions")), <get-transfer-id> index)
+  
+  // Failures
+  binding-to-code: Binding(var, expr) -> <fail> with <debug> "Bindings must be typed"
+  
+  
+  

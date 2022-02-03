@@ -201,7 +201,7 @@ rules
   pattern-to-decls-internal(|chain, rootterm, bindings): PatternTuple(head, tail) -> <chainmap(pattern-to-decls-internal|chain, rootterm, bindings)> [head|tail]
   pattern-to-decls-internal(|chain, rootterm, bindings): PatternVar(var) -> <var-set-or-ignore(|chain, rootterm, var)> bindings
   
-  var-set-or-ignore(|chain, rootterm, var): [] -> [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [VariableDeclInit(VariableDecl(Id(var)), <chain-to-expression(|rootterm)> chain)]))]
+  var-set-or-ignore(|chain, rootterm, var): [] -> [java:bstm |[ IStrategoTerm ~var = ~expr; ]|] where expr := <chain-to-expression(|rootterm)> chain
   var-set-or-ignore(|chain, rootterm, var): [var|_] -> []
   var-set-or-ignore(|chain, rootterm, var): [_|t] -> <var-set-or-ignore(|chain, rootterm, var)> t
   
@@ -222,11 +222,11 @@ rules
   pattern-to-subgraphs-internal(|aliases): CFGChainElementEnd() -> []
   
   build-node: var -> java:bstm* |[
-  	Graph x = new Graph(Helpers.getTermNode(~var), tree.nodeById(Helpers.getTermId(~var)));
+  	Graph x = new Graph(Helpers.getTermId(~var), tree.nodeById(Helpers.getTermId(~var)));
   ]|
   where 
     x := <to-build-node-name> var
-  refer-node: (alias, var) -> <concat> [<build-node> var, [LocVarDeclStm(LocalVarDecl([], <node-type>, [VariableDeclInit(VariableDecl(Id(<to-build-node-name> alias)), ExpressionName(Id(<to-build-node-name> var)))]))]]
+  refer-node: (alias, var) -> <concat> [<build-node> var, [LocVarDeclStm(LocalVarDecl([], ClassType(Id("Node"), None()), [VariableDeclInit(VariableDecl(Id(<to-build-node-name> alias)), ExpressionName(Id(<to-build-node-name> var)))]))]]
   rec-node: var -> java:bstm* |[ 
     Graph ~x = createCfg_inner(tree, ~var);
   ]|

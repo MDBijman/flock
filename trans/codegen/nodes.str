@@ -21,10 +21,7 @@ imports
   signatures/java/packages/-
 
 rules
-  node-type-name = !"Node"
-  node-type-id = !Id(<node-type-name>)
-  node-type = !ClassType(<node-type-id>, None())
-  node-set-type = node-type;to-set-type
+  node-set-type = !ClassType(Id("Node"), None()); to-set-type
 
   node-factory-switch: r -> Block(<get-sorted-proprules; number(node-factory-switch-entry)>)
   get-sorted-proprules = filter(?PropRule(_, _, _, _));reverse

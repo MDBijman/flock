@@ -6,6 +6,7 @@ imports
   codegen/lattices
   codegen/cfg-matcher
   codegen/user-functions
+  codegen/transfer-functions
   codegen/types
 
   signatures/flock/-
@@ -23,11 +24,17 @@ imports
   signatures/java/packages/-
 
 rules
-  expr-to-stmts: MapComp(m@MapBinding(a, b), _, _, predicates) -> <map-comp-body(|[])> (m, predicates)
-  expr-to-stmts: SetComp(expr, _, _, predicates) -> <set-comp-body(|[])> (expr, predicates)
-  expr-to-stmts: m@Match(_, _) -> <match-to-stmts> m
-  expr-to-stmts: l@Let(bind, expr) -> (<transform-expr> expr, <binding-to-code> bind)
-  expr-to-stmts: _ -> []
+  transform-result-expr(|res-name): ExprExprRef(Ref(n))                                      -> [java:bstm |[ return TransferFunction.assignEvalResult(direction, node, ~res-name, ~n); ]|]
+  transform-result-expr(|res-name): Cast(ExprExprRef(Ref(n)), UserTypeParams("SimpleMap",_)) -> [java:bstm |[ return TransferFunction.assignEvalResult(direction, node, ~res-name, ~n); ]|]
+  transform-result-expr(|res-name): Cast(ExprExprRef(Ref(n)), UserTypeParams("MaySet",_))    -> [java:bstm |[ return TransferFunction.assignEvalResult(direction, node, ~res-name, ~n); ]|]
+  transform-result-expr(|res-name): Cast(ExprExprRef(Ref(n)), UserTypeParams("MustSet",_))   -> [java:bstm |[ return TransferFunction.assignEvalResult(direction, node, ~res-name, ~n); ]|]
+  transform-result-expr(|res-name): e -> <fail> with <debug> "This result expression is not implemented yet"; <debug> e
+
+  transform-toplevel-expr: MapComp(m@MapBinding(a, b), _, _, predicates) -> <map-comp-body(|[])> (m, predicates)
+  transform-toplevel-expr: SetComp(expr, _, _, predicates) -> <set-comp-body(|[])> (expr, predicates)
+  transform-toplevel-expr: m@Match(_, _) -> <match-to-stmts> m
+  transform-toplevel-expr: l@Let(bind, expr) -> (<transform-expr> expr, <binding-to-code> bind)
+  transform-toplevel-expr: e -> (<transform-expr> e, [])
 
   // Overload - be careful, this can cause issues when bindings aren't passed correctly.
   transform-expr = transform-expr(|[])
@@ -36,15 +43,14 @@ rules
   transform-expr(|bindings): SetLiteral(l) -> <set-create> <map(transform-expr)> l
   transform-expr(|bindings): TypedSetLiteral(l, t) -> <set-create> <map(transform-expr)> l
   transform-expr(|bindings): Contains(element, set) -> InvokeQExp(<transform-expr(|bindings)> set, None(), Id("contains"), [<transform-expr(|bindings)> element])
-  transform-expr(|bindings): SetComp(expr, _, _, predicates) -> <fail> with <debug> "Set comprehension must not be nested expression"
+ 
   transform-expr(|bindings): SetCompExprPredicate(x) -> <transform-expr(|bindings)> x
   transform-expr(|bindings): Union(a, b) -> <set-union> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
   transform-expr(|bindings): Difference(a, b) -> <set-difference> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
   transform-expr(|bindings): Intersection(a, b) -> <set-intersection> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b] 
   
   // Maps
-  transform-expr(|bindings): MapLiteral(l) -> <map-create> <map(transform-binding(|bindings)); flatten-list> l
-  transform-expr(|bindings): MapComp(_, _, _, _) -> <fail> with <debug> "Mapcomp must not be nested expression"
+  transform-expr(|bindings): MapLiteral(l) -> java:expr |[ ~map-value.entrySet().stream() ]| where map-value := <map-create> <map(transform-binding(|bindings)); flatten-list> l
   transform-expr(|bindings): MapCompExprPredicate(x) -> <transform-expr(|bindings)> x
   transform-binding(|bindings): MapBinding(k, v) -> [<transform-expr(|bindings)> k, <transform-expr(|bindings)> v]
   
@@ -52,91 +58,72 @@ rules
   transform-expr(|bindings): TypedUnion(a, UserTypeParams(t, _), b) -> <lattice-lub(|t)> (a, b)
   transform-expr(|bindings): TypedUnion(a, Map(_, _), b) -> <map-union> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
   transform-expr(|bindings): TypedUnion(a, Set(_), b) -> <set-union> [<transform-expr(|bindings)> a, <transform-expr(|bindings)> b]
-  transform-expr(|bindings): TypedEmptyLiteral(Map(_, _)) -> <map-create> []
+  transform-expr(|bindings): TypedEmptyLiteral(Map(_, _)) -> java:expr |[ ~map-value.entrySet().stream() ]| where map-value := <map-create> []
   transform-expr(|bindings): TypedEmptyLiteral(Set(_))    -> <set-create> []
   
   // Lattices
-  transform-expr(|bindings): TopOf(lattice) -> <lattice-top(|lattice)>
-  transform-expr(|bindings): BottomOf(lattice) -> <lattice-bottom(|lattice)>
-  transform-expr(|bindings): Appl(LubOf(lattice), [l, r]) -> <lattice-lub(|lattice)> (l, r)
-  transform-expr(|bindings): Appl(GlbOf(lattice), [l, r]) -> <lattice-glb(|lattice)> (l, r)
-  transform-expr(|bindings): Appl(LeqOf(lattice), [l, r]) -> <lattice-leq(|lattice)> (l, r)
-  transform-expr(|bindings): Appl(GeqOf(lattice), [l, r]) -> <lattice-geq(|lattice)> (l, r)
+  transform-expr(|bindings): TopOf(lattice)                -> <lattice-top(|lattice)>
+  transform-expr(|bindings): BottomOf(lattice)             -> <lattice-bottom(|lattice)>
+  transform-expr(|bindings): Appl(LubOf(lattice), [l, r])  -> <lattice-lub(|lattice)> (l, r)
+  transform-expr(|bindings): Appl(GlbOf(lattice), [l, r])  -> <lattice-glb(|lattice)> (l, r)
+  transform-expr(|bindings): Appl(LeqOf(lattice), [l, r])  -> <lattice-leq(|lattice)> (l, r)
+  transform-expr(|bindings): Appl(GeqOf(lattice), [l, r])  -> <lattice-geq(|lattice)> (l, r)
   transform-expr(|bindings): Appl(NLeqOf(lattice), [l, r]) -> <lattice-nleq(|lattice)> (l, r)
   transform-expr(|bindings): LatticeValue(e) -> <transform-expr(|bindings); access-lattice-value> e
   
   // Functions
   transform-expr(|bindings): PropOrAppl(func, arg) -> <invoke-function(|func)> [ExpressionName(Id(arg))]
-  transform-expr(|bindings): Appl(Ref(func), args) -> <map(transform-expr);invoke-function(|func)> args
+  transform-expr(|bindings): Appl(Ref(func), args) -> <map(transform-expr); invoke-function(|func)> args
   
   // Literals
   transform-expr(|bindings): ExprLiteral(literal) -> <transform-expr(|bindings)> literal
   transform-expr(|bindings): StringLiteral(x) -> StringLiteral(x)
-  transform-expr(|bindings): IntLiteral(x) -> Deci(x)
-  transform-expr(|bindings): TrueLiteral() -> True()
-  transform-expr(|bindings): FalseLiteral() -> False()
+  transform-expr(|bindings): IntLiteral(x)  -> Deci(x)
+  transform-expr(|bindings): TrueLiteral()  -> java:expr |[ true ]|
+  transform-expr(|bindings): FalseLiteral() -> java:expr |[ false ]|
   
   // Non-sets
-  transform-expr(|bindings): WithOrigin(expr, vars) -> <fail> "Not supported"
   transform-expr(|bindings): Cast(expr, type) -> <transform-expr(|bindings); construct-from(|type)> expr
   transform-expr(|bindings): ExprExprRef(x) -> <transform-expr(|bindings)> x
   transform-expr(|bindings): Ref(name) -> java:expr |[ ~name ]|
   transform-expr(|bindings): TypedRef(name, UserTypeParams(type, _)) -> java:expr |[ new ~type(~name) ]|
   transform-expr(|bindings): TypedRef(x, Name()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
   transform-expr(|bindings): TypedRef(x, String()) -> java:expr |[ ((IStrategoString) x).stringValue() ]|
-  transform-expr(|bindings): Match(expr, arms) -><fail> with <debug> "Match must not be nested expression"
-  transform-expr(|bindings): Let(bind, expr) -> <transform-expr(|bindings)> expr
+  transform-expr(|bindings): Let(bind, expr) -> <debug; transform-expr(|bindings)> expr
    
-  transform-expr(|bindings): NEq(l, r)    -> Not(InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r]))
-  transform-expr(|bindings): Eq(l, r)     -> InvokeQExp(<transform-expr(|bindings)> l, None(), Id("equals"), [<transform-expr(|bindings)> r])
-  transform-expr(|bindings): Not(x)       -> Not(<transform-expr(|bindings);cast-to-bool> x)
   transform-expr(|bindings): Predicate(x) -> <transform-expr(|bindings)> x
-  transform-expr(|bindings): If(i, t, e)  -> Cond(<transform-expr(|bindings);cast-to-bool> i, <transform-expr(|bindings)> t, <transform-expr(|bindings)> e)
-  transform-expr(|bindings): And(l, r)    -> LazyAnd(<transform-expr(|bindings);cast-to-bool> l, <transform-expr(|bindings);cast-to-bool> r)
-  transform-expr(|bindings): Or(l, r)     -> LazyOr(<transform-expr(|bindings);cast-to-bool> l, <transform-expr(|bindings);cast-to-bool> r)
-  transform-expr(|bindings): Add(l, r)    -> <add-or-concat> (<transform-expr(|bindings)> l, <transform-expr(|bindings)> r)
-  transform-expr(|bindings): Sub(l, r)    -> Sub(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Mul(l, r)    -> Mul(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Div(l, r)    -> Div(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Mod(l, r)    -> Mod(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Neg(x)       -> Minus(<transform-expr(|bindings);cast-to-int> x)
-  transform-expr(|bindings): Lt(l, r)     -> Lt(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Lte(l, r)    -> LtEq(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Gt(l, r)     -> Gt(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
-  transform-expr(|bindings): Gte(l, r)    -> GtEq(<transform-expr(|bindings);cast-to-int> l, <transform-expr(|bindings);cast-to-int> r)
+  transform-expr(|bindings): NEq(l, r)    -> java:expr |[ !~le.equals(~re) ]| where le := <transform-expr(|bindings)> l; re := <transform-expr(|bindings)> r
+  transform-expr(|bindings): Eq(l, r)     -> java:expr |[ ~le.equals(~re)  ]| where le := <transform-expr(|bindings)> l; re := <transform-expr(|bindings)> r
+  transform-expr(|bindings): If(i, t, e)  -> java:expr |[~cond ? ~then : ~else ]| where cond := <transform-expr(|bindings); cast-to-bool> i; then := <transform-expr(|bindings)> t; else := <transform-expr(|bindings)> e
+  transform-expr(|bindings): And(l, r)    -> java:expr |[ ~le && ~re ]| where le := <transform-expr(|bindings); cast-to-bool> l; re := <transform-expr(|bindings); cast-to-bool> r
+  transform-expr(|bindings): Or(l, r)     -> java:expr |[ ~le || ~re ]| where le := <transform-expr(|bindings); cast-to-bool> l; re := <transform-expr(|bindings); cast-to-bool> r
+  transform-expr(|bindings): Add(l, r)    -> java:expr |[ ~le + ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
+  transform-expr(|bindings): Sub(l, r)    -> java:expr |[ ~le - ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
+  transform-expr(|bindings): Mul(l, r)    -> java:expr |[ ~le * ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
+  transform-expr(|bindings): Div(l, r)    -> java:expr |[ ~le / ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
+  transform-expr(|bindings): Mod(l, r)    -> java:expr |[ ~le % ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
+  transform-expr(|bindings): Neg(x)       -> java:expr |[ -e ]| where e := <transform-expr(|bindings); cast-to-int> x
+  transform-expr(|bindings): Not(x)       -> java:expr |[ !e ]| where e := <transform-expr(|bindings); cast-to-bool> x
+  transform-expr(|bindings): Lt(l, r)     -> java:expr |[ ~le < ~re  ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
+  transform-expr(|bindings): Lte(l, r)    -> java:expr |[ ~le <= ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
+  transform-expr(|bindings): Gt(l, r)     -> java:expr |[ ~le > ~re  ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
+  transform-expr(|bindings): Gte(l, r)    -> java:expr |[ ~le >= ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
   transform-expr(|bindings): ExprTuple(l, r) -> NewInstance(None(), [], Id("StrategoTuple"), [], None(), [ NewArrayInit(ClassType([], Id("IStrategoTerm"), None()), [AnnotateDim([])], ArrayInit(<concat> [[<transform-expr(|bindings);cast-to-term> l], <map(transform-expr(|bindings);cast-to-term)> r])), Null()])
-  transform-expr(|bindings): Occurrence(namespace, name) -> Null() // FIXME
-  
-  transform-expr(|bindings): TermIndex(r) -> java:expr |[ ~r.getProperty(~string).lattice ]|
-  where
-    string := <to-string-literal> "position"
 
-  transform-expr(|bindings): TypedExprTerm(UserTypeParams(type, _), constructor, args) -> java:expr |[ new ~type(e) ]|
+  transform-expr(|bindings): TermIndex(r) -> java:expr |[ ~r.getProperty(~string).lattice ]| where string := <to-string-literal> "position"
+
+  transform-expr(|bindings): TypedExprTerm(UserTypeParams(type, _), constructor, args) -> java:expr |[
+  	new ~type(new StrategoAppl(new StrategoConstructor(~cons-lit, ~arg-count), new IStrategoTerm[] { ~e-args* }, null))
+  ]|
   where
-    e := <transform-expr(|bindings)> ExprTerm(constructor, args)
-  transform-expr(|bindings): ExprTerm(constructor, args) -> NewInstance(
-    None()
-  , []
-  , Id("StrategoAppl")
-  , []
-  , None()
-  , [ NewInstance(
-        None()
-      , []
-      , Id("StrategoConstructor")
-      , []
-      , None()
-      , [StringLiteral(<to-string-literal> constructor), Deci(<length;int-to-string> args)]
-      )
-    , NewArrayInit(
-        ClassType([], Id("IStrategoTerm"), None())
-      , [AnnotateDim([])]
-      , ArrayInit(<map(transform-expr(|bindings);cast-to-term)> args)
-      )
-    , Null()
-    ]
-  )
-  
+    cons-lit  := <to-string-literal> constructor
+  ; arg-count := <length; int-to-string> args
+  ; e-args*   := <map(transform-expr(|bindings); cast-to-term)> args
+
+  /*
+  * Match
+  */
+
   match-to-stmts: x@Match(expr, arms) -> (result, <concat> [
       [LocVarDeclStm(LocalVarDecl([], ClassType(Id("IStrategoTerm"), None()), [ VariableDeclInit(VariableDecl(Id(rootterm)), <transform-expr(|[]); cast-to-term> expr)]))],
       [java:bstm |[ Object ~result = null; ]|],
@@ -156,15 +143,13 @@ rules
   ; write-result := java:bstm |[ ~result-name = ~result; ]|
   ; statements := <concat> [pattern-vars, [write-result]]
     
-  cast-to-int: expr -> CastPrimitive(NumericType([], Int()), expr)
-  cast-to-bool: expr -> CastPrimitive(BooleanType([]), expr)
+  cast-to-int: e -> java:expr |[ (int) e ]|
+  cast-to-bool: e ->  java:expr |[ (boolean) e ]|
   
-  add-origins(|vars): e -> <add-origins> (vars, e)
-  add-origins: ([], e) -> e
-  add-origins: ([Var(v)|t], e)      -> <add-origins> (t, java:expr |[ e.withOrigin(~v.dependencies()) ]|)
-  add-origins: ([Position(v)|t], e) -> <add-origins> (t, java:expr |[ e.withOrigin(Helpers.getTermPosition(~v)) ]|)
+  /*
+  * Set Comprehension
+  */
   
-  // set comprehension
   set-comp-body(|bindings): (expr, predicates) -> (name, [
     java:bstm |[ Set ~name = new HashSet(); ]|,
     <set-comp-sources(|expr, nonsources, bindings, name)> sources
@@ -190,9 +175,11 @@ rules
   set-comp-predicates(|bindings, result-name): (expr, []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id(result-name)), None(), Id("add"), [<transform-expr(|bindings)> expr]))
   set-comp-predicates(|bindings, result-name): (expr, [h|t]) -> If(<transform-expr(|bindings)> h, Block([<set-comp-predicates(|bindings, result-name)> (expr, t)]))
   
-  // map comprehension
+  /*
+  * Map Comprehension
+  */
+  
   map-comp-body(|bindings): (bind, predicates) -> (name, [
-  	java:bstm |[ Map ~name = new HashMap(); ]|,
     <map-comp-sources(|bind, nonsources, bindings, name)> sources
   ])
   where
@@ -200,23 +187,45 @@ rules
   ; sources := <filter(?MapCompExprSource(_))> predicates
   ; nonsources := <filter(not(?MapCompExprSource(_)))> predicates
   
-  map-comp-sources(|bind, predicates, bindings, result-name): [] -> <map-comp-predicates(|bindings, result-name)> (bind, predicates)
-  map-comp-sources(|bind, predicates, bindings, result-name): [MapCompExprSource(MapSource(PatternVar(k), PatternVar(v), map))|tail] -> 
-    java:bstm |[
-      for (Object o : (~map-expr).entrySet()) {
-      	Entry entry = (Entry) o;
-        Object ~k = entry.getKey();
-        Object ~v = entry.getValue();
-        ~loop-stmt
-      }
-    ]|
+  // Map each map source to a stream so that it can be .concat'ed to the original stream
+  map-comp-sources(|bind, predicates, bindings, result-name): [MapCompExprSource(MapSource(PatternVar(k), PatternVar(v), map))] -> 
+	java:bstm |[ Stream<Map.Entry> ~result-name = ~final-stream; ]|
   with 
     map-expr  := <transform-expr(|bindings); access-lattice-value; cast-to-map> map
-  ; loop-stmt := <map-comp-sources(|bind, predicates, bindings, result-name)> tail
+  ; initial-stream := java:expr |[
+		(~map-expr).entrySet().stream()
+	]|
+  ; final-stream := <map-comp-predicates(|bindings)> (bind, initial-stream, predicates)
+  
+  // To implement multiple comprehesion sources, you need to perform a cartesian product of two input streams
+  // Each filter must then also declare/extract multiple map entries from the stream
+  map-comp-sources(|bind, predicates, bindings, result-name): _ -> <fail> "Multiple comprehension sources not supported"
+  
+  // Map each predicate to a java expression
+  map-comp-predicates(|bindings): (source, acc, []) -> acc 
+  map-comp-predicates(|bindings): (source, acc, [h|t]) -> <map-comp-predicates(|bindings)> (source, next-filter, t)
+  where 
+    decls*      := <binding-to-local-declarations> source
+  ; filter-expr := <transform-expr(|bindings)> h
+  ; next-filter := java:expr |[ ~acc.filter(o -> {
+  		~decls*
+  		return ~filter-expr;
+    })]|
     
-  map-comp-predicates(|bindings, result-name): (MapBinding(k, v), []) -> ExpressionStatement(InvokeQExp(ExpressionName(Id(result-name)), None(), Id("put"), [<transform-expr(|bindings)> k, <transform-expr(|bindings)> v]))
-  map-comp-predicates(|bindings, result-name): (bind, [h|t]) -> If(<transform-expr(|bindings)> h, Block([<map-comp-predicates(|bindings, result-name)> (bind, t)]))
+  binding-to-local-declarations: MapBinding(ExprExprRef(Ref(k)), ExprExprRef(Ref(v))) -> [
+  	java:bstm |[ Entry entry = (Entry) o; ]|,
+  	java:bstm |[ Object ~k = entry.getKey();]|,
+	java:bstm |[ Object ~v = entry.getValue();]|
+   ]
     
-  // Unsupported expressions
+  map-comp-binding: MapBinding(k, v) -> <id>
+    
+  // Failures
+  transform-expr(|bindings): ExprTerm(constructor, args) -> <fail> with <debug> "ExprTerm must be desugared to TypedExprTerm"
+  transform-expr(|bindings): Occurrence(namespace, name) -> <fail> with <debug> "Occurrence not implemented"// FIXME
+  transform-expr(|bindings): Match(expr, arms) -><fail> with <debug> "Match must not be nested expression"
+  transform-expr(|bindings): SetComp(expr, _, _, predicates) -> <fail> with <debug> "Set comprehension must not be nested expression"
+  transform-expr(|bindings): MapComp(_, _, _, _) -> <fail> with <debug> "Mapcomp must not be nested expression"
+  transform-expr(|bindings): WithOrigin(expr, vars) -> <fail> "Not supported"
   transform-expr(|bindings) = debug(!"Unsupported expression found ");fail
   

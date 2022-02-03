@@ -57,6 +57,7 @@ rules
   ; equals          := <lattice-equals> lattice-name
   ; to-string       := <lattice-to-string> inner-type
   ; copy            := <lattice-copy> lattice-name
+  ; set-value       := <lattice-value-setter> lattice-value-name
   ; lattice-methods := <map(to-lattice-method(|lattice-name, lattice-value-name, kind))> functions
   where
     superclass-name := <lattice-type-to-superclass> inner-type
@@ -70,6 +71,7 @@ rules
       ~*to-string
       ~*lattice-methods
       ~*copy
+      ~*set-value
     }
   ]|
   <+ interface-name  := <lattice-kind-to-interface> kind
@@ -82,6 +84,7 @@ rules
        ~*to-string
        ~*lattice-methods
        ~*copy
+       ~*set-value
      }
    ]|
   <+ class := java:type-dec |[
@@ -93,6 +96,7 @@ rules
        ~*to-string
        ~*lattice-methods
        ~*copy
+       ~*set-value
      }
    ]|
       
@@ -166,6 +170,12 @@ rules
     }
   ]|]
 
+  lattice-value-setter: value-name -> [classb-dec |[
+    @Override
+    public void setValue(Object value) {
+		this.value = (~value-name) value;
+    }
+  ]|]
 
   /*
   * The inner lattice type declaration does not map to a method
@@ -181,14 +191,7 @@ rules
       return ~res;
     }
   ]|
-  where <requires-statements> expr
-  with (res, stmts) := <expr-to-stmts> expr
-  
-  to-lattice-method(|lattice-name, lattice-value-name, kind): Top(expr) -> java:method-dec |[
-    public static ~lattice-name top() {
-      return ~java-expr;
-    }
-  ]| where java-expr := <transform-expr> expr
+  with (res, stmts) := <transform-toplevel-expr> expr
     
   /*
   * Lattice method: Bottom
@@ -199,22 +202,14 @@ rules
       return ~res;
     }
   ]|
-  where <requires-statements> expr
-  with (res, stmts) := <expr-to-stmts> expr
-  
-  to-lattice-method(|lattice-name, lattice-value-name, kind): Bottom(expr) -> java:method-dec |[
-    public static ~lattice-name bottom() {
-      return ~java-expr;
-    }
-  ]|
-  where java-expr := <transform-expr> expr
-  
+  with (res, stmts) := <transform-toplevel-expr> expr
+
   /*
   * Lattice method: Least Upper Bound (Typed Arguments)
   */
   to-lattice-method(|lattice-name, lattice-value-name, kind): Lub(TypedParam(l, lt), TypedParam(r, rt), expr) -> java:method-dec |[
     @Override
-    public boolean lub(FlockLattice other) {
+    public boolean lub(Object other) {
       ~*decls-l
       ~*decls-r
       ~bstm*:stmts
@@ -224,27 +219,10 @@ rules
       return _is_changed;
     }
   ]|
-  where <requires-statements> expr
   with
     decls-l := <make-local-declarations> (lattice-name, "this", l, lt)
   ; decls-r := <make-local-declarations> (lattice-name, "other", r, rt)
-  ; (res, stmts) := <expr-to-stmts> expr
-  
-  to-lattice-method(|lattice-name, lattice-value-name, kind): Lub(TypedParam(l, lt), TypedParam(r, rt), expr) -> java:method-dec |[
-    @Override
-    public boolean lub(FlockLattice other) {
-      ~*decls-l
-      ~*decls-r
-       ~lattice-name _res_lat = ~java-expr;
-      boolean _is_changed = !this.equals(_res_lat);
-      this.value = _res_lat.value;
-      return _is_changed;
-    }
-  ]|
-  with
-    java-expr := <transform-expr; simple-cast(|lattice-value-name); construct-from(|lattice-name)> expr
-  ; decls-l := <make-local-declarations> (lattice-name, "this", l, lt)
-  ; decls-r := <make-local-declarations> (lattice-name, "other", r, rt)
+  ; (res, stmts) := <transform-toplevel-expr> expr
 
 
   /*
