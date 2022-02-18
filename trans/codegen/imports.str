@@ -57,6 +57,8 @@ rules
   	"org.spoofax.terms.StrategoString",
   	"org.spoofax.terms.StrategoList",
   	"flock.subject.common.Graph",
+  	"flock.subject.common.GraphBuilder",
+  	"flock.subject.common.TermTree",
   	"flock.subject.common.Analysis",
   	"flock.subject.common.Graph.Node",
   	"flock.subject.common.Analysis.Direction",
@@ -75,9 +77,4 @@ rules
   	"flock.subject.common.SetUtils",
   	"flock.subject.common.TransferFunction",
   	"flock.subject.common.UniversalSet"
-  	//"flock.subject.live.Live",
-  	//"flock.subject.live.LiveVariablesFlowAnalysis",
-  	//"flock.subject.alias.PointsToFlowAnalysis",
-  	//"flock.subject.value.ValueFlowAnalysis",
-  	//"flock.subject.value.ValueFlowAnalysisProperties.ConstProp"
   ]

@@ -37,6 +37,7 @@ rules
 		@SuppressWarnings({ ~unchecked_str, ~rawtypes_str, ~unused_str })
 		@Override
 		public boolean eval(Analysis.Direction direction, FlockLattice res, Node node) {
+			ITermFactory factory = Flock.instance.factory;
 			~bstm*:statements
 		}
 	}

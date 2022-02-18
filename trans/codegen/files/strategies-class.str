@@ -18,19 +18,47 @@ imports
 
 strategies
 
-  module-to-strategies-java: Module(name, _, r) -> java:compilation-unit |[
+  module-to-strategies-java: Module(name, _, r) -> <retain-all(propdef-to-strategy-classes); flatten-list> r 
+  
+  /*
+  * Returns a list of pairs (java class, filename).
+  */
+  propdef-to-strategy-classes: PropDef(name, UserTypeParams("MaySet", [p]), _) -> [(class-name, java:compilation-unit |[
     package org.spoofax;
     ~import-dec*:imports
-    public class FlowAnalysisStrategies {
-      ~*inners
+    public class ~class-name extends Strategy {
+      public static ~class-name instance = new ~class-name();
+       
+      @Override
+	  public IStrategoTerm invoke(Context context, IStrategoTerm current) {
+        ITermFactory factory = context.getFactory();
+        TermId id = new TermId(((IStrategoInt) current).intValue());
+        Node node = Flock.instance.getNode(id);
+        if (node == null) {
+          Flock.printDebug(~error-message + id.getId());
+          return null;
+        }
+        Flock.instance.analysisWithName(~property-name).performDataAnalysis(Flock.instance.graph, Flock.instance.graph_scss, node);
+        
+		IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
+			.stream()
+			.map(n -> Helpers.toTerm(n))
+			.collect(Collectors.toList()));
+
+		return result;
+      }
     }
-  ]|
-  with 
+  ]|)]
+  with
     imports := <all-imports>
-  ; inners := <retain-all(propdef-to-strategy-classes); flatten-list> r 
+  ; class-name := <concat-strings> ["get_", name, "_0_0"]
+  ; error-message := <to-string-literal> "CfgNode is null with id "
+  ; property-name := <to-string-literal> name
   
-  propdef-to-strategy-classes: PropDef(name, UserTypeParams("MaySet", [p]), _) -> classb-dec |[
-    public static class ~class-name extends Strategy {
+  propdef-to-strategy-classes: PropDef(name, UserTypeParams("MustSet", [p]), _) -> [(class-name, java:compilation-unit |[
+    package org.spoofax;
+    ~import-dec*:imports
+    public class ~class-name extends Strategy {
       public static ~class-name instance = new ~class-name();
        
       @Override
@@ -52,43 +80,17 @@ strategies
 		return result;
       }
     }
-  ]|
+  ]|)]
   with
-    class-name := <concat-strings> ["get_", name, "_0_0"]
+    imports := <all-imports>
+  ; class-name := <concat-strings> ["get_", name, "_0_0"]
   ; error-message := <to-string-literal> "CfgNode is null with id "
   ; property-name := <to-string-literal> name
   
-  propdef-to-strategy-classes: PropDef(name, UserTypeParams("MustSet", [p]), _) -> classb-dec |[
-    public static class ~class-name extends Strategy {
-      public static ~class-name instance = new ~class-name();
-       
-      @Override
-	  public IStrategoTerm invoke(Context context, IStrategoTerm current) {
-        ITermFactory factory = context.getFactory();
-        TermId id = new TermId(((IStrategoInt) current).intValue());
-        Node node = Flock.instance.getNode(id);
-        if (node == null) {
-          Flock.printDebug(~error-message + id.getId());
-          return null;
-        }
-        Flock.instance.analysisWithName(~property-name).performDataAnalysis(Flock.instance.graph, Flock.instance.graph_scss, node);
-        
-		IStrategoList result = factory.makeList(((Collection<? extends IStrategoTerm>) node.getProperty(~property-name).lattice.value())
-			.stream()
-			.map(n -> Helpers.toTerm(n))
-			.collect(Collectors.toList()));
-
-		return result;
-      }
-    }
-  ]|
-  with
-    class-name := <concat-strings> ["get_", name, "_0_0"]
-  ; error-message := <to-string-literal> "CfgNode is null with id "
-  ; property-name := <to-string-literal> name
-  
-  propdef-to-strategy-classes: PropDef(name, UserTypeParams("SimpleMap", [k, v]), _) -> classb-dec* |[
-    public static class ~class-name extends Strategy {
+  propdef-to-strategy-classes: PropDef(name, UserTypeParams("SimpleMap", [k, v]), _) -> [(class-name, java:compilation-unit |[
+    package org.spoofax;
+    ~import-dec*:imports
+    public class ~class-name extends Strategy {
       public static ~class-name instance = new ~class-name();
        
       @Override
@@ -111,7 +113,11 @@ strategies
       }
     }
     
-    public static class ~class-name2 extends Strategy {
+
+  ]|), (class-name2, java:compilation-unit |[
+    package org.spoofax;
+    ~import-dec*:imports
+    public class ~class-name2 extends Strategy {
       public static ~class-name2 instance = new ~class-name2();
        
       @Override
@@ -139,14 +145,17 @@ strategies
 		return asTerm;
       }
     }
-  ]|
+  ]|)]
   with
-    class-name := <concat-strings> ["get_", name, "_0_0"]
+    imports := <all-imports>
+  ; class-name := <concat-strings> ["get_", name, "_0_0"]
   ; class-name2 := <concat-strings> ["get_", name, "_0_1"]
   ; error-message := <to-string-literal> "CfgNode is null with id "
   ; property-name := <to-string-literal> name
   
-  propdef-to-strategy-classes: PropDef(name, _, _) -> classb-dec |[
+  propdef-to-strategy-classes: PropDef(name, _, _) -> [(class-name, java:compilation-unit |[
+    package org.spoofax;
+    ~import-dec*:imports
     public static class ~class-name extends Strategy {
       public static ~class-name instance = new ~class-name();
        
@@ -166,9 +175,10 @@ strategies
 		return result;
       }
     }
-  ]|
+  ]|)]
   with
-    class-name := <concat-strings> ["get_", name, "_0_0"]
+    imports := <all-imports>
+  ; class-name := <concat-strings> ["get_", name, "_0_0"]
   ; error-message := <to-string-literal> "CfgNode is null with id "
   ; property-name := <to-string-literal> name 
   

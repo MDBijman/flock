@@ -19,17 +19,23 @@ imports
 
 rules
 
-  cfg-matcher-methods-public: r -> [recursive, once]
-  where
-    cfg-rules := <filter(?(CFGRule(Root(), _, _)))> r
-  ; switch := <cfg-matcher-switch-internal(empty-block, keep-leaves)> cfg-rules
-  ; recursive := java:method-dec |[
-      public static Graph createCfgRecursive(TermTree tree, IStrategoTerm term) {
-		Graph result_graph = new Graph();
+  cfg-matcher-methods-from-roots: r -> [java:method-dec |[
+  	public static Graph createCfgRecursive(TermTree tree, IStrategoTerm term) {
+		return createCfgRecursive_inner(term).build(tree);
+	}
+  ]|,
+  java:method-dec |[
+  	public static Graph createCfgOnce(TermTree tree, IStrategoTerm term) {
+		return createCfg_inner(term).build(tree);
+	}
+  ]|,
+  java:method-dec |[
+    public static GraphBuilder createCfgRecursive_inner(IStrategoTerm term) {
+		GraphBuilder result_graph = GraphBuilder.empty();
 		for (IStrategoTerm subterm : term.getSubterms()) {
-			Graph subgraph = createCfgRecursive(tree, subterm);
-			if (subgraph.size() != 0) {
-				result_graph.mergeGraph(subgraph);
+			GraphBuilder subgraph = createCfgRecursive_inner(subterm);
+			if (subgraph.hasRealNodes()) {
+				result_graph.merge(subgraph);
 			}
 		}
 		
@@ -37,53 +43,51 @@ rules
 		
 		return result_graph;
   	  }
-    ]|
-  ; once := java:method-dec |[
-      public static Graph createCfgOnce(TermTree tree, IStrategoTerm term) {
-		return createCfg_inner(tree, term);
-  	  }
-    ]|
-      
-  cfg-matcher-method-internal: r -> java:method-dec |[
-      private static Graph createCfg_inner(TermTree tree, IStrategoTerm term) {
-		Graph result_graph = new Graph();
+  ]|]
+  where
+    cfg-rules := <filter(?(CFGRule(Root(), _, _)))> r
+  ; switch := <cfg-matcher-switch-internal(empty-block)> cfg-rules
+  
+  cfg-matcher-methods-from-nonroots: r -> [
+  	java:method-dec |[
+      private static GraphBuilder createCfg_inner(IStrategoTerm term) {
+		GraphBuilder result_graph = GraphBuilder.empty();
 	  	if (TermUtils.isList(term)) {
 			IStrategoList list = M.list(term);
 			if (list.isEmpty()) {
-				return new Graph();
+				return GraphBuilder.fallthrough();
 			}
-			result_graph.mergeGraph(createCfg_inner(tree, list.head()));
-			list = list.tail();
+
+			TermId currentTail = result_graph.ENTRY;
+
 			while (!list.isEmpty()) {
-				Graph new_result = createCfg_inner(tree, list.head());
-				result_graph.mergeGraph(result_graph.leaves, new_result);
-				if (new_result.size() > 0) {
-					result_graph.leaves = new_result.leaves;
-				}
+				GraphBuilder new_result = createCfg_inner(list.head());
+				result_graph.merge(new_result);
+				result_graph.connect(currentTail, new_result.ENTRY);
+				currentTail = new_result.EXIT;
 				list = list.tail();
 			}
+
+			result_graph.connect(currentTail, result_graph.EXIT);
 		} else ~else
 		return result_graph;
   	  }
-    ]| 
+    ]|]
   where
     cfg-rules := <filter(?(CFGRule(NoRoot(), _, _)))> r
-  ; else := <cfg-matcher-switch-internal(throw-exception, clear-leaves)> cfg-rules
-  
-  clear-leaves = fail
-  keep-leaves = id
+  ; switch := <cfg-matcher-switch-internal(empty-block)> cfg-rules
+  ; else := <cfg-matcher-switch-internal(throw-exception)> cfg-rules
   
   empty-block: _ -> Block([])
   throw-exception: _ -> Block([Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not create CFG node for term '\""), ExpressionName(Id("term"))), StringLiteral("\"'.\""))]))])
   
-  cfg-matcher-switch-internal(make-default, keep-leaves): [] -> <make-default>
-  cfg-matcher-switch-internal(make-default, keep-leaves): [CFGRule(_, pattern, body)|tail] -> IfElse(condition, then, else)
+  cfg-matcher-switch-internal(make-default): [] -> <make-default>
+  cfg-matcher-switch-internal(make-default): [CFGRule(_, pattern, body)|tail] -> IfElse(condition, then, else)
   where
     condition := <cfg-pattern-to-condition(|"term", [])> pattern
-  ; then := <pattern-to-decls(keep-leaves|"term", [])> (pattern, body)
-  ; else := <cfg-matcher-switch-internal(make-default, keep-leaves)> tail
+  ; then := <pattern-to-decls(|"term", [])> (pattern, body)
+  ; else := <cfg-matcher-switch-internal(make-default)> tail
 
-  
   cond-same:   (l, r)  -> java:expr |[ ~l == ~r ]|
   cond-equals: (l, r)  -> java:expr |[ ~l.equals(~r) ]|
   cond-type-equals(|chain, rootterm): pattern -> <cond-equals> (<chain-to-getname(|rootterm)> chain, StringLiteral(<cfg-pattern-to-typename;to-string-literal> pattern))
@@ -140,7 +144,7 @@ rules
   make-declaration(|parent): idx -> java:bstm |[ ITerm ~child = ~parent.childAt(~idxs); ]|
   where
     idxs := <int-to-string> idx
-  ; child := $[[parent]_[idx]]  
+  ; child := $[[parent]_[idx]]
   check-equality-if-bound(|var): bindings -> java:expr |[ to_be_implemented ]| where <elem> (var, bindings)
   
   
@@ -182,14 +186,17 @@ rules
   /*
   * Builds the declarations that extract inner variables and aliases from the CFG rules
   */
-  pattern-to-decls(keep-leaves|rootterm, bindings): (pattern, body) -> Block(<concat> [declarations, recursions, linking])
+  pattern-to-decls(|rootterm, bindings): (pattern, body) -> Block(<concat> [declarations, recursions, linking, irregular])
   with
     // Create local variable declarations for matched node and pattern variables
     declarations := <pattern-to-decls-internal(|[], rootterm, bindings)> pattern
   	// Recursively create cfg for children
   ; recursions   := <map(pattern-to-subgraphs(|pattern)); concat; uniq> body
   	// Link created cfgs
-  ; linking      := <cfg-body-link(keep-leaves)> body
+  ; linking      := <cfg-body-link()> body
+  ; irregular    := [<find-path(|Entry(), Exit()) < ![] + (find-path(|CFGChainElementStart(), CFGChainElementEnd()) < ![] + mark-irregular)> body]
+  mark-irregular = !java:bstm |[ result_graph.markIrregular(Helpers.getTermId(term)); ]|
+  
   pattern-to-decls(|rootterm, bindings) = pattern-to-decls-internal(|[], rootterm, bindings)
   pattern-to-decls-internal(|chain, rootterm, bindings): At(var, x) -> <concat> [
     <pattern-to-decls-internal(|chain, rootterm, bindings)> PatternVar(var),
@@ -204,7 +211,6 @@ rules
   var-set-or-ignore(|chain, rootterm, var): [] -> [java:bstm |[ IStrategoTerm ~var = ~expr; ]|] where expr := <chain-to-expression(|rootterm)> chain
   var-set-or-ignore(|chain, rootterm, var): [var|_] -> []
   var-set-or-ignore(|chain, rootterm, var): [_|t] -> <var-set-or-ignore(|chain, rootterm, var)> t
-  
   
   /*
   * Builds the recursive calls that build the sub-CFGs
@@ -222,13 +228,13 @@ rules
   pattern-to-subgraphs-internal(|aliases): CFGChainElementEnd() -> []
   
   build-node: var -> java:bstm* |[
-  	Graph x = new Graph(Helpers.getTermId(~var), tree.nodeById(Helpers.getTermId(~var)));
+  	GraphBuilder x = GraphBuilder.fromSingle(Helpers.getTermId(~var));
   ]|
   where 
     x := <to-build-node-name> var
   refer-node: (alias, var) -> <concat> [<build-node> var, [LocVarDeclStm(LocalVarDecl([], ClassType(Id("Node"), None()), [VariableDeclInit(VariableDecl(Id(<to-build-node-name> alias)), ExpressionName(Id(<to-build-node-name> var)))]))]]
   rec-node: var -> java:bstm* |[ 
-    Graph ~x = createCfg_inner(tree, ~var);
+    GraphBuilder x = createCfg_inner(~var);
   ]|
   where
     x := <to-rec-node-name> var
@@ -255,44 +261,58 @@ rules
   /*
   * Merges the sub-CFGs and builds the final result
   */
-  cfg-body-link(keep-leaves): chains -> <concat> [start-builds, inner-builds, reset-leaves, end-builds]
+
+  cfg-body-link(): Chain([Entry(), Exit()]) -> [java:bstm |[ result_graph = GraphBuilder.placeholder(); ]|]
+  cfg-body-link(): chains -> <concat> [build-elements,link-elements]
   with
-    start-builds  := <retain-all(is-chain-start); map(cfg-body-link-internal); concat> chains
-  ; inner-builds  := <retain-all(not(is-chain-start + is-chain-end)); map(cfg-body-link-internal); concat> chains
-  ; reset-leaves  := <keep-leaves < ![] + ![java:bstm |[ result_graph.leaves = new HashSet<>(); ]|]> () 
-  ; end-builds    := <retain-all(is-chain-end); map(cfg-body-link-internal); concat> chains
-  cfg-body-link-internal: Chain([CFGChainElementStart(), r]) -> <cfg-body-add-to-result> r
-  cfg-body-link-internal: Chain([Entry(), r]) -> <cfg-body-add-to-result> r
-
-  cfg-body-link-internal: Chain([r, Exit()]) -> [java:bstm |[
-    result_graph.leaves.addAll(x.leaves);
+    elements := <map(extract-chain); flatten-list; uniq> chains
+  ; build-elements := <map(build-chain-element); concat> elements
+  ; link-elements := <map(link-chain-element); concat> chains
+  extract-chain: Chain(e) -> e
+  
+  build-chain-element: Ref(var) -> [java:bstm |[ result_graph.merge(x); ]|] where x := <to-build-node-name> var
+  build-chain-element: Recurse(var) ->[java:bstm |[ result_graph.merge(x); ]|] where x := <to-rec-node-name> var
+  build-chain-element = ![]
+  
+  link-chain-element: Chain([Entry(), CFGChainElementEnd()]) -> [
+    java:bstm |[ result_graph.connect(result_graph.ENTRY, result_graph.END); ]|
+  ]
+  
+  link-chain-element: Chain([Entry(), r]) -> [java:bstm |[
+    result_graph.connect(result_graph.ENTRY, x.ENTRY);
+  ]|] where x := <to-graph-name> r 	
+    
+  link-chain-element: Chain([CFGChainElementStart(), r]) -> [java:bstm |[
+    result_graph.connect(result_graph.START, x.ENTRY);
+  ]|] where x := <to-graph-name> r 	
+    
+  link-chain-element: Chain([r, Exit()]) -> [java:bstm |[
+    result_graph.connect(x.EXIT, result_graph.EXIT);
+  ]|] where x := <to-graph-name> r 	
+  
+  link-chain-element: Chain([r, CFGChainElementEnd()]) -> [java:bstm |[
+    result_graph.connect(x.EXIT, result_graph.END);
   ]|] where x := <to-graph-name> r
-  cfg-body-link-internal: Chain([r, CFGChainElementEnd()]) -> [java:bstm |[
-    result_graph.leaves.addAll(x.leaves);
-  ]|] where x := <to-graph-name> r
 
-  cfg-body-link-internal: Chain([a, b]) -> [java:bstm |[
-    result_graph.mergeGraph(~leaves, ~children);
+  link-chain-element: Chain([a, b]) -> [java:bstm |[
+    result_graph.connect(~parents.EXIT, ~children.ENTRY);
   ]|]
   where
-    children := <to-graph-name> b
-  ; leaves := <to-graph-leaves-access> a
-  cfg-body-link-internal: Chain([_, _]) -> []
+    parents := <to-graph-name> a
+  ; children := <to-graph-name> b
   
-  is-chain-start = ?Chain([Entry(), _]) + ?Chain([CFGChainElementStart(), _])
-  is-chain-end = ?Chain([_, Exit()]) + ?Chain([_, CFGChainElementEnd()])
+  link-chain-element: c@Chain([Entry(), Exit()]) -> [java:bstm |[
+      result_graph.connect(result_graph.ENTRY, result_graph.EXIT);
+  ]|]
   
-  // These are the heads of the created cfg
-  cfg-body-add-to-result: Ref(var) -> [java:bstm |[ result_graph.mergeGraph(x); ]|] where x := <to-build-node-name> var
-  cfg-body-add-to-result: Recurse(var) ->[java:bstm |[ result_graph.mergeGraph(x); ]|] where x := <to-rec-node-name> var
-
+  link-chain-element: c@Chain([_, _]) -> <debug; fail> c
+  
   cfg-pattern-to-typename: At(_, x) -> <cfg-pattern-to-typename> x
   cfg-pattern-to-typename: PatternTerm(name, _) -> name
   
   // Turn a pattern match into the java expression containing the result
   to-graph-name: r@Recurse(var) -> <extract-node-name> r
   to-graph-name: r@Ref(var) -> <extract-node-name> r
-  to-graph-leaves-access: n -> java:expr|[x.leaves]| where x := <to-graph-name> n
   
   extract-node-name: Recurse(var) -> <to-rec-node-name> var
   extract-node-name: Ref(var) -> <to-build-node-name> var
@@ -301,3 +321,24 @@ rules
   to-build-node-leaves-name = append-string(|"_nb_leaves")
   to-rec-node-name = append-string(|"_nr")
   to-rec-node-leaves-name = append-string(|"_nr_leaves")
+  
+  /*
+  * Finds a path from current to goal in a set of CFG rules
+  * This is used to determine if there is an entry -> exit path
+  */
+  
+  find-path(|current, goal): _ -> <eq> (current, goal)
+  find-path(|current, goal): edges -> <id>
+  where
+    new-sources := <retain-all(match-chain-src(|current); get-chain-dst)> edges
+  // Remove all chains that point to a new source, so we remove loops
+  // And then try to find a path from the new source to exit
+  ; new-edges := <remove-all(match-chain-src(|current))> edges
+  ; <any-path(|new-sources, goal)> new-edges
+  any-path(|sources, goal): edges -> <fetch(any-path-inner(|edges, goal))> sources
+  any-path-inner(|edges, goal): src -> <find-path(|src, goal)> edges
+  match-chain-src(|match-src): Chain([src, _]) -> <id> where <eq> (match-src, src)
+  match-chain-dst(|match-dst): Chain([_, dst]) -> <id> where <eq> (match-dst, dst)
+  get-chain-dst: Chain([_, dst]) -> dst
+  get-chain-src: Chain([src, _]) -> src
+  

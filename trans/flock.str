@@ -45,10 +45,13 @@ rules // Debugging
     ; result   := <flo-to-props-java; pp-java-string> node  
 
   debug-show-strategies-java:
-    (node, _, _, path, project-path) -> (filename, result)
+    (node, _, _, path, project-path) -> (filenames, result)
     with
-      filename := <guarantee-extension(|"strategies.java")> path
-    ; result   := <flo-to-strategies-java; pp-java-string> node  
+      files    := <flo-to-strategies-java> node
+    ; base-path := <dirname> path
+    ; filenames := <map(Fst; make-java-output-path(|base-path))> files
+    ; result    := <map(Snd; pp-java-string)> files
+  make-java-output-path(|base): filename -> $[[base]/[<guarantee-extension(|"java")> filename]]
 
   debug-show-cfggraph-java:
     (node, _, _, path, project-path) -> (filename, result)
@@ -68,12 +71,13 @@ rules // Debugging
       filename := <guarantee-extension(|"norm.flock")> path
     ; result   := <normalize-module; flo-to-analysis-java; pp-java-string> selected
   
-  compile-all: t@(Module(module-path, _), _, _, _, _) -> <unzip> [ 
-    <debug-normalize-and-compile-java; ?(p1, f1); !(<make-output-path(|module-name, $[[module-name]])> p1, f1)> t, 
-    <debug-show-strategies-java;       ?(p2, f2); !(<make-output-path(|module-name, $[[module-name]Strategies])> p2, f2)> t,
-    <debug-show-props-java;            ?(p3, f3); !(<make-output-path(|module-name, $[[module-name]Properties])> p3, f3)> t
-  ] where module-name := <base-filename> module-path
-  
+  compile-all: t@(Module(module-path, _), _, _, _, _) -> <unzip> [analysis, strats*, props]
+  where
+    module-name := <base-filename> module-path
+  ; analysis := <debug-normalize-and-compile-java; ?(p1, f1); !(<make-output-path(|module-name, $[[module-name]])> p1, f1)> t
+  ; strats*  := <debug-show-strategies-java; zip; map(rewrite-strategy-output(|module-name))> t
+  ; props    := <debug-show-props-java;            ?(p3, f3); !(<make-output-path(|module-name, $[[module-name]Properties])> p3, f3)> t
+  rewrite-strategy-output(|module-name) = ?(path, java); where(<base-filename> path => file); !(<make-output-path(|module-name, file)> path, java)
   make-output-path(|module-name, file): base -> $[[<dirname> base]/build/[module-name]/[<guarantee-extension(|"java")> file]]
   
 rules

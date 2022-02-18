@@ -108,12 +108,13 @@ rules
   transform-expr(|bindings): Lte(l, r)    -> java:expr |[ ~le <= ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
   transform-expr(|bindings): Gt(l, r)     -> java:expr |[ ~le > ~re  ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
   transform-expr(|bindings): Gte(l, r)    -> java:expr |[ ~le >= ~re ]| where le := <transform-expr(|bindings); cast-to-int> l; re := <transform-expr(|bindings); cast-to-int> r
-  transform-expr(|bindings): ExprTuple(l, r) -> NewInstance(None(), [], Id("StrategoTuple"), [], None(), [ NewArrayInit(ClassType([], Id("IStrategoTerm"), None()), [AnnotateDim([])], ArrayInit(<concat> [[<transform-expr(|bindings);cast-to-term> l], <map(transform-expr(|bindings);cast-to-term)> r])), Null()])
+  transform-expr(|bindings): ExprTuple(l, r) -> java:expr |[ factory.makeTuple(~elements, null) ]|
+  where elements := NewArrayInit(ClassType([], Id("IStrategoTerm"), None()), [AnnotateDim([])], ArrayInit(<concat> [[<transform-expr(|bindings);cast-to-term> l], <map(transform-expr(|bindings);cast-to-term)> r]))
 
   transform-expr(|bindings): TermIndex(r) -> java:expr |[ ~r.getProperty(~string).lattice ]| where string := <to-string-literal> "position"
 
   transform-expr(|bindings): TypedExprTerm(UserTypeParams(type, _), constructor, args) -> java:expr |[
-  	new ~type(new StrategoAppl(new StrategoConstructor(~cons-lit, ~arg-count), new IStrategoTerm[] { ~e-args* }, null))
+  	new ~type(factory.makeAppl(factory.makeConstructor(~cons-lit, ~arg-count), new IStrategoTerm[] { ~e-args* }, null))
   ]|
   where
     cons-lit  := <to-string-literal> constructor
