@@ -34,8 +34,8 @@ strategies
 
   main-class(|r): module-name -> java:type-dec |[
 	  public class FlowAnalysis extends Analysis {
-	  	public FlowAnalysis() {
-	  	  super(~prop-name, ~direction-enum);
+	  	public FlowAnalysis(int id) {
+	  	  super(~prop-name, ~direction-enum, id);
 	  	}
 	  	
 	  	@Override

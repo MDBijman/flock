@@ -61,7 +61,7 @@ rules
   	"flock.subject.common.TermTree",
   	"flock.subject.common.Analysis",
   	"flock.subject.common.Graph.Node",
-  	"flock.subject.common.Analysis.Direction",
+  	"flock.subject.common.IAnalysis.Direction",
   	"flock.subject.common.CfgNodeId",
   	"flock.subject.common.Dependency",
   	"flock.subject.common.Helpers",

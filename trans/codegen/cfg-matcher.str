@@ -31,10 +31,10 @@ rules
   ]|,
   java:method-dec |[
     public static GraphBuilder createCfgRecursive_inner(IStrategoTerm term) {
-		GraphBuilder result_graph = GraphBuilder.empty();
+		GraphBuilder result_graph = GraphBuilder.empty(Helpers.getTermId(term));
 		for (IStrategoTerm subterm : term.getSubterms()) {
 			GraphBuilder subgraph = createCfgRecursive_inner(subterm);
-			if (subgraph.hasRealNodes()) {
+			if (subgraph != null) {
 				result_graph.merge(subgraph);
 			}
 		}
@@ -51,11 +51,11 @@ rules
   cfg-matcher-methods-from-nonroots: r -> [
   	java:method-dec |[
       private static GraphBuilder createCfg_inner(IStrategoTerm term) {
-		GraphBuilder result_graph = GraphBuilder.empty();
+		GraphBuilder result_graph = GraphBuilder.empty(Helpers.getTermId(term));
 	  	if (TermUtils.isList(term)) {
 			IStrategoList list = M.list(term);
 			if (list.isEmpty()) {
-				return GraphBuilder.fallthrough();
+				return GraphBuilder.fallthrough(Helpers.getTermId(term));
 			}
 
 			TermId currentTail = result_graph.ENTRY;
@@ -75,10 +75,9 @@ rules
     ]|]
   where
     cfg-rules := <filter(?(CFGRule(NoRoot(), _, _)))> r
-  ; switch := <cfg-matcher-switch-internal(empty-block)> cfg-rules
   ; else := <cfg-matcher-switch-internal(throw-exception)> cfg-rules
   
-  empty-block: _ -> Block([])
+  empty-block: _ -> java:stm |[ { return null; } ]|
   throw-exception: _ -> Block([Throw(NewInstance(None(), [], Id("RuntimeException"), [], None(), [Add(Add(StringLiteral("\"Could not create CFG node for term '\""), ExpressionName(Id("term"))), StringLiteral("\"'.\""))]))])
   
   cfg-matcher-switch-internal(make-default): [] -> <make-default>
